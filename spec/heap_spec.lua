@@ -78,4 +78,31 @@ describe("min heap", function()
       end
     end
   end)
+
+  it('should have acceptable performance', function()
+    math.randomseed(os.time())
+
+    local RENDERS = 1000
+    -- we can handle over 1000 frame updates per second with the current code
+    local FRAMES = 1000
+
+    local heaps = {}
+    for _ = 1, FRAMES do
+      table.insert(heaps, newHeap(5))
+    end
+
+    local starttime = os.clock()
+    for _ = 1, RENDERS do
+      local value = math.random()
+      for _, heap in ipairs(heaps) do
+        heap:push(value)
+      end
+    end
+    local endtime = os.clock()
+
+    local SIXTY_FPS = 1 / 60
+    local TARGET = SIXTY_FPS / 100 * RENDERS
+    local actual = endtime - starttime
+    assert.are.geq(TARGET, actual)
+  end)
 end)

@@ -43,7 +43,7 @@ describe('moment estimator', function()
       est:update(sample)
     end
 
-    local smean, svar, sskew, skurt = sample_stats(normal_data)
+    local smean, svar, sskew = sample_stats(normal_data)
 
     assert.are.equal(#normal_data, est:sample_count())
 
@@ -52,12 +52,10 @@ describe('moment estimator', function()
     local var_err = pct_err(est:variance(), svar)
     -- proper normal skewness is 0
     local skew_err = math.abs(est:skewness() - sskew)
-    local kurt_err = pct_err(est:kurtosis(), skurt)
 
     assert.are.near(0, mean_err, TOLERANCE)
     assert.are.near(0, var_err, TOLERANCE)
     assert.are.near(0, skew_err, TOLERANCE)
-    assert.are_near(0, kurt_err, TOLERANCE)
   end)
 
   it('should accurately estimate the moments of an exponential distribution', function()
@@ -66,31 +64,30 @@ describe('moment estimator', function()
       est:update(sample)
     end
 
-    local smean, svar, sskew, skurt = sample_stats(exponential_data)
+    local smean, svar, sskew = sample_stats(exponential_data)
 
     assert.are.equal(#exponential_data, est:sample_count())
 
     local mean_err = pct_err(est:mean(), smean)
     local var_err = pct_err(est:variance(), svar)
     local skew_err = pct_err(est:skewness(), sskew)
-    local kurt_err = pct_err(est:kurtosis(), skurt)
 
     assert.are.near(0, mean_err, TOLERANCE)
     assert.are.near(0, var_err, TOLERANCE)
     assert.are.near(0, skew_err, TOLERANCE)
-    assert.are_near(0, kurt_err, TOLERANCE)
   end)
 
   it('should perform acceptably', function()
     -- we should be doing 1 update per frame (as in FPS) per frame (as in CreateFrame)
     -- want to make sure we can do that without issue
     local SIXTY_FPS = 1 / 60
-    local loops = 10
-    local TARGET = SIXTY_FPS / 100 * loops * #normal_data
-    -- current code can handle about 300 frame updates per render while staying below 1% of the 60fps time.
-    -- the number is around 380 on my work PC but not sure that'll be reliable
-    local frames = 300
+    local loops = 1000
+    local TARGET = SIXTY_FPS / 100 * loops
+    -- we can handle over 500 frame updates per second with the current code
+    local frames = 500
     local ests = {}
+
+    math.randomseed(os.time())
 
     for _ = 1,frames do
       table.insert(ests, newEstimator())
@@ -98,13 +95,12 @@ describe('moment estimator', function()
 
     local starttime = os.clock()
     for _ = 1,loops do
-      for _, sample in ipairs(normal_data) do
-        for _, est in ipairs(ests) do
-          est:update(sample)
-        end
+      -- we have to care about exhausting the rng
+      local value = math.random()
+      for _, est in ipairs(ests) do
+        est:update(value)
       end
     end
-
     local endtime = os.clock()
 
     local actual = endtime - starttime

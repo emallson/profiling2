@@ -1,0 +1,3 @@
+[submodule "external/vscode-wow-api"]
+	path = external/vscode-wow-api
+	url = https://github.com/Ketho/vscode-wow-api.git

@@ -1,4 +1,5 @@
-local _, ns = ...
+---@type ProfilingNs
+local ns = select(2, ...)
 
 ---@class TinyMinHeap
 ---@field private values number[]
@@ -17,6 +18,10 @@ local function newHeap(size)
   }
   setmetatable(result, meta)
   return result
+end
+
+function tinyMinHeap:contents()
+  return self.values
 end
 
 function tinyMinHeap:is_empty()
@@ -113,11 +118,20 @@ function tinyMinHeap:pop()
   return result
 end
 
+function tinyMinHeap:clear()
+  local size = #self.values
+  for i = 1, size do
+    self.values[i] = nil
+  end
+end
+
 -- bind to addon namespace in addon context
 if type(ns) == "table" then
-  ns.heap = {
+  ---@class HeapNs
+  local heap = {
     new = newHeap
   }
+  ns.heap = heap
 end
 
 return newHeap

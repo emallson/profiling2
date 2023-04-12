@@ -1,4 +1,5 @@
-local _, ns = ...
+---@type ProfilingNs
+local ns = select(2, ...)
 
 ---@class MomentEstimator
 ---@field private index number
@@ -16,6 +17,7 @@ local m2_arena = {}
 local m3_arena = {}
 local samples_arena = {}
 
+---@return MomentEstimator
 local function newEstimator()
   table.insert(m1_arena, 0)
   table.insert(m2_arena, 0)
@@ -70,10 +72,19 @@ function estimator:skewness()
   return m3_arena[self.index] * scale / math.pow(m2_arena[self.index], 1.5)
 end
 
+function estimator:reset()
+  m1_arena[self.index] = 0
+  m2_arena[self.index] = 0
+  m3_arena[self.index] = 0
+  samples_arena[self.index] = 0
+end
+
 if type(ns) == 'table' then
-  ns.moment_estimator = {
+  ---@class MomentEstimatorNs
+  local estimatorNs = {
     new = newEstimator
   }
+  ns.moment_estimator = estimatorNs
 end
 
 return newEstimator

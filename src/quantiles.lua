@@ -83,7 +83,8 @@ function baseEstimator:update(value)
 end
 
 function baseEstimator:enoughData()
-  return self.count >= 10
+  -- no real theoretical justification for 50, just needs enough time to converge
+  return self.count >= 50
 end
 
 ---@param index number

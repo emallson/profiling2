@@ -105,8 +105,11 @@ function trackerBase:export()
 
   if self.moments:sample_count() >= 2 then
     stats.variance = self.moments:variance()
+  end
+  if self.moments:sample_count() >= 3 then
     stats.skew = self.moments:skewness()
   end
+
   return {
     commits = self.commits,
     calls = self.total_calls,

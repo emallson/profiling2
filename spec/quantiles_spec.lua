@@ -23,7 +23,7 @@ local function pct_err(approx, exact)
   return math.abs(approx - exact) / exact
 end
 
-local TOLERANCE = 0.06
+local TOLERANCE = 0.02
 
 describe('the quantile estimator', function()
   it('should correctly estimate the quantiles of a stream of data', function()
@@ -33,43 +33,29 @@ describe('the quantile estimator', function()
     end
     assert.are.equal(#test_data, est:sample_count())
 
-    assert.are.geq(TOLERANCE, pct_err(est:get(1), sample_quantile(0.5)))
-    assert.are.geq(TOLERANCE, pct_err(est:get(2), sample_quantile(0.75)))
-    assert.are.geq(TOLERANCE, pct_err(est:get(3), sample_quantile(0.95)))
+    local quantiles = est:quantiles()
+    assert.is_not_nil(quantiles)
+    for key, est_quant in pairs(quantiles or {}) do
+      local p = tonumber(key)
+      assert.are.geq(TOLERANCE, pct_err(est_quant, sample_quantile(p)))
+    end
   end)
 
   it('should have acceptable performance', function()
     math.randomseed(os.time())
 
     local RENDERS = 1000
-    -- the performance of this method is very different for estimators that are called 
-    -- frequently vs estimators that are only called a few times.
-    --
-    -- overall frame cap is around 50 (using same methodology as heaps and moments), but 
-    -- if the distribution of call counts is long-tailed, we can go far, far higher
-    --
-    -- LOW_CAP represents the amount of calls we can do without switching to the more 
-    -- expensive part of the algorithm. it is not "performance immediatly tanks if you go 
-    -- past this" but "each call past this point is significantly slower"
-    local LOW_CAP = 9
-    local HIGH_FRAMES = 50
-    local LOW_FRAMES = 450
+    local FRAMES = 300
 
     local ests = {}
-    for _ = 1, HIGH_FRAMES + LOW_FRAMES do
+    for _ = 1, FRAMES do
       table.insert(ests, newEstimator())
     end
 
     local starttime = os.clock()
-    for _ = 1, LOW_CAP do
+    for _ = 1, RENDERS do
       local value = math.random()
-      for i = 1, LOW_FRAMES + HIGH_FRAMES do
-        ests[i]:update(value)
-      end
-    end
-    for _ = 1, RENDERS - LOW_CAP do
-      local value = math.random()
-      for i = 1, HIGH_FRAMES do
+      for i = 1, FRAMES do
         ests[i]:update(value)
       end
     end

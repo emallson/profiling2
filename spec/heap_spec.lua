@@ -1,7 +1,13 @@
 local newHeap = require('heap')
+local say = require('say')
 
-assert:register("assertion", "leq", function(_, arguments) return arguments[1] <= arguments[2] end)
-assert:register("assertion", "geq", function(_, arguments) return arguments[1] >= arguments[2] end)
+say:set('assertion.leq', 'Expected %s <= %s')
+say:set('assertion.lt', 'Expected %s < %s')
+say:set('assertion.geq', 'Expected %s >= %s')
+say:set('assertion.gt', 'Expected %s > %s')
+
+assert:register("assertion", "leq", function(_, arguments) return arguments[1] <= arguments[2] end, 'assertion.leq', 'assertion.gt')
+assert:register("assertion", "geq", function(_, arguments) return arguments[1] >= arguments[2] end, 'assertion.geq', 'assertion.lt')
 
 describe("min heap", function()
   it("should allow pushing a single value", function()

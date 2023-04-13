@@ -6,3 +6,4 @@
 src\lib.lua
 src\heap.lua
 src\moments.lua
+src\quantiles.lua

@@ -14,9 +14,6 @@ local targetQuantiles = {
   0.99
 }
 
--- we are working with small numbers. scale it up a bit to improve performance
-local SCALE = 100
-
 -- not going full arena, but we are gonna use a single table for the values. these index into it
 local OBS = 1
 local STEP = 2
@@ -45,7 +42,6 @@ local function newEstimator()
 end
 
 local function trueUpdate(self, value)
-  value = value * SCALE
   for i = 1, #targetQuantiles do
     local p = targetQuantiles[i]
     local offset = (i - 1) * WIDTH
@@ -78,7 +74,7 @@ end
 
 ---@param value number
 function baseEstimator:update(value)
-  self:initialize(value * SCALE)
+  self:initialize(value)
   self.count = self.count + 1
 end
 
@@ -94,7 +90,7 @@ function baseEstimator:get(index)
     return nil
   end
 
-  return self.data[(index - 1) * WIDTH + OBS] / SCALE
+  return self.data[(index - 1) * WIDTH + OBS]
 end
 
 ---@return table<string, number>|nil

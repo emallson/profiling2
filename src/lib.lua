@@ -3,7 +3,7 @@
 ---@field public moment_estimator MomentEstimatorNs
 ---@field public quantile QuantileNs
 
----@type ProfilingNs
+---@type string, ProfilingNs
 local thisAddonName, ns = ...
 local profiling2 = {}
 
@@ -52,6 +52,11 @@ local function addonName(frame)
   end
 
   return name
+end
+
+local function isProbablyBlizzardFrame(frame)
+  local issecure, name = issecurevariable({ frame = frame }, 'frame')
+  return issecure or name == thisAddonName
 end
 
 ---@param frame Frame
@@ -217,6 +222,7 @@ local function hookCreateFrame()
       -- workaround for the CastSequenceManager frame, which is lazily created
       -- after we hook and neither forbidden, protected, top-level, or named
       or (frame.elapsed ~= nil)
+      or isProbablyBlizzardFrame(frame)
       or name == "NamePlateDriverFrame" then
       -- print("skipping frame hook")
       return
@@ -327,7 +333,7 @@ end
 
 ---@param mapId number
 function profiling2.startMythicPlus(mapId)
-  profiling2.resetState()
+  profiling2.resetTrackers()
   ResetCPUUsage()
   currentMythicPlus = {
     kind = "mythicplus",
@@ -371,11 +377,11 @@ function profiling2.endMythicPlus(isCompletion, mapId)
 
   currentMythicPlus.success = isCompletion
   currentMythicPlus.endTime = time()
-  table.insert(profiling2.recordings, {
+  table.insert(Profiling2_Storage.recordings, {
     encounter = currentMythicPlus,
     data = profiling2.buildUsageTable()
   })
-  profiling2.resetState()
+  profiling2.resetTrackers()
   currentMythicPlus = nil
 end
 

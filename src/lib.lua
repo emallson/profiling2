@@ -4,7 +4,7 @@
 ---@field public quantile QuantileNs
 
 ---@type ProfilingNs
-local ns = select(2, ...)
+local thisAddonName, ns = ...
 local profiling2 = {}
 
 ---Get the name of the frame for path construction. Uses GetName if possible, falls back to GetDebugName if unset.
@@ -42,7 +42,16 @@ end
 ---@param frame Frame
 ---@return string
 local function addonName(frame)
-  return select(2, issecurevariable({ frame = frame }, 'frame')) or 'Unknown'
+  local name = select(2, issecurevariable({ frame = frame }, 'frame')) or 'Unknown'
+
+  -- blizzard frames will return our own addon name because we built the table.
+  -- all Profiling2 frames have the addon name in the frame name and a frame name set,
+  -- so they are easily identifiable without this
+  if name == thisAddonName then
+    return 'Unknown'
+  end
+
+  return name
 end
 
 ---@param frame Frame
@@ -259,6 +268,8 @@ function profiling2.registerFunction(key, fn, tracker)
   }
 end
 
+local renderTracker = getScriptTracker()
+
 function profiling2.buildUsageTable()
   local scripts = {}
   for key, value in pairs(trackedFunctions) do
@@ -268,6 +279,7 @@ function profiling2.buildUsageTable()
     end
   end
   local results = {
+    onUpdateDelay = renderTracker:export(),
     scripts = scripts
   }
 
@@ -278,6 +290,7 @@ function profiling2.resetTrackers()
   for _, value in ipairs(trackedFunctions) do
     value.tracker:reset()
   end
+  renderTracker:reset()
 end
 
 function profiling2.startEncounter(encounterId, encounterName, difficultyId, groupSize)
@@ -374,7 +387,8 @@ if isScriptProfilingEnabled() then
   frame:RegisterEvent("CHALLENGE_MODE_START")
   frame:RegisterEvent("CHALLENGE_MODE_COMPLETED")
   frame:RegisterEvent("CHALLENGE_MODE_RESET")
-  frame:SetScript("OnUpdate", function()
+  frame:SetScript("OnUpdate", function(_, elapsed)
+    renderTracker:record(elapsed)
     frameIndex = frameIndex + 1
   end)
   frame:SetScript("OnEvent", function(_, eventName, ...)
@@ -387,8 +401,8 @@ if isScriptProfilingEnabled() then
     elseif eventName == "CHALLENGE_MODE_COMPLETED" or eventName == "CHALLENGE_MODE_RESET" then
       profiling2.endMythicPlus(eventName == "CHALLENGE_MODE_COMPLETED", ...)
     elseif eventName == "ADDON_LOADED" then
-      local addonName = ...
-      if addonName == "Profiling2" then
+      local loadedAddonName = ...
+      if loadedAddonName == thisAddonName then
         ---@type table
         Profiling2_Storage = Profiling2_Storage or { recordings = {} }
         hookCreateFrame()

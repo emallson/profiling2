@@ -7,15 +7,31 @@
 local ns = select(2, ...)
 local profiling2 = {}
 
----@param frameName string
+---Get the name of the frame for path construction. Uses GetName if possible, falls back to GetDebugName if unset.
+---@param frame Frame|ParentedObject
+---@return string
+local function frameName(frame)
+  local name = frame:GetName()
+  if name == nil or #name == 0 then
+    local debugName = frame:GetDebugName()
+    if debugName == nil or #debugName  == 0 then
+      return "Anonymous"
+    end
+    return string.match(debugName, "[^%.]+$")
+  end
+  return name
+end
+
+---@param addonName string
+---@param name string
 ---@param origParent Frame|ParentedObject
 ---@return string
-function profiling2.buildFrameKey(frameName, origParent)
+function profiling2.buildFrameKey(addonName, name, origParent)
   local parent = origParent
 
-  local key = frameName
+  local key = '@' .. addonName .. '/' .. name
   while parent ~= nil do
-    local subKey = parent:GetDebugName()
+    local subKey = frameName(parent)
     key = key .. '/' .. subKey
     parent = parent:GetParent()
   end
@@ -25,8 +41,14 @@ end
 
 ---@param frame Frame
 ---@return string
+local function addonName(frame)
+  return select(2, issecurevariable({ frame = frame }, 'frame')) or 'Unknown'
+end
+
+---@param frame Frame
+---@return string
 function profiling2.frameKey(frame)
-  return profiling2.buildFrameKey(frame:GetDebugName(), frame:GetParent())
+  return profiling2.buildFrameKey(addonName(frame), frameName(frame), frame:GetParent())
 end
 
 ---check if script profiling is enabled
@@ -154,8 +176,28 @@ local function getScriptTracker()
   return tracker
 end
 
+local INSTRUMENTATION_FNS = {}
+local function buildWrapper(tracker, wrappedFn)
+  local function result(...)
+    local startTime = debugprofilestop()
+    securecallfunction(wrappedFn, ...)
+    local endTime = debugprofilestop()
+
+    tracker:record(endTime - startTime)
+  end
+
+  INSTRUMENTATION_FNS[result] = true
+  return result
+end
+
+---@param fn function
+---@return boolean
+local function isInstrumentedFn(fn)
+  return INSTRUMENTATION_FNS[fn] or false
+end
+
 local function hookCreateFrame()
-  local function hookSetScript(frame, scriptType, fn, alreadyInstrumented)
+  local function hookSetScript(frame, scriptType, fn)
     local name = frame:GetName()
     local parent = frame:GetParent()
     if (frame.IsTopLevel and frame:IsToplevel())
@@ -163,11 +205,14 @@ local function hookCreateFrame()
       or (frame.IsProtected and frame:IsProtected())
       or (name ~= nil and string.match(name, "Blizzard") ~= nil)
       or (parent ~= nil and parent:GetDebugName() == "NamePlateDriverFrame")
+      -- workaround for the CastSequenceManager frame, which is lazily created
+      -- after we hook and neither forbidden, protected, top-level, or named
+      or (frame.elapsed ~= nil)
       or name == "NamePlateDriverFrame" then
       -- print("skipping frame hook")
       return
     end
-    if fn == nil or alreadyInstrumented then
+    if fn == nil or isInstrumentedFn(fn) then
       return
     end
 
@@ -179,20 +224,9 @@ local function hookCreateFrame()
     local key = strjoin(':', frameKey, scriptType)
     profiling2.registerFunction(key, wrappedFn, tracker)
 
-    frame:SetScript(scriptType, function(...)
-      local startTime = debugprofilestop()
-      local status, err = pcall(wrappedFn, ...)
-      local endTime = debugprofilestop()
+    local scriptWrapper = buildWrapper(tracker, wrappedFn)
 
-      tracker:record(endTime - startTime)
-      if not status then
-        DevTools_Dump({
-          frame = frameKey,
-          err = err,
-          loc = "callsite"
-        })
-      end
-    end, true)
+    frame:SetScript(scriptType, scriptWrapper)
   end
 
   local dummyFrame = CreateFrame("Frame")

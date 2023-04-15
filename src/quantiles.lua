@@ -110,6 +110,14 @@ function baseEstimator:sample_count()
   return self.count
 end
 
+function baseEstimator:reset()
+  self.count = 0
+  self.update = baseEstimator.update
+  for i = 1,#self.data do
+    self.data[i] = nil
+  end
+end
+
 if type(addonNs) == 'table' then
   ---@class QuantileNs
   local quant = {

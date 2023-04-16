@@ -51,15 +51,15 @@ const trackerData = z.object({
   top5: z.number().array().max(5),
 });
 
-const keypath = z.string().transform((val, _ctx) => {
+const keypath = z.string().transform((val) => {
   const colons = val.split(":");
   const scriptName = colons.at(-1);
-  let path = colons.slice(0, -2).join(":").split("/");
+  let path = colons.slice(0, -1).join(":").split("/");
 
   let addonName = undefined;
   if (path[0].startsWith("@")) {
     addonName = path[0].substring(1);
-    path = path.slice(1, -1);
+    path = path.slice(1);
   }
 
   return {
@@ -93,6 +93,7 @@ const savedVariables = z.object({
   recordings: recording.array(),
 });
 
+export type Recording = z.infer<typeof recording>;
 export type Encounter = z.infer<typeof encounter>;
 export type TrackerData = z.infer<typeof trackerData>;
 export type SavedVariables = z.infer<typeof savedVariables>;

@@ -3,7 +3,13 @@ import { BetaParams, fit, pdf } from "./beta";
 import { styled } from "@macaron-css/solid";
 
 import "../resources/sparkline-font/font-faces.css";
-import { createMemo } from "solid-js";
+import { Show, createMemo } from "solid-js";
+import {
+  SavedVariablesProvider,
+  useSavedVariables,
+} from "./SavedVariablesContext";
+import FilePickerPage from "./FilePickerPage";
+import EncounterSelector, { useSelectedRecording } from "./EncounterSelector";
 
 const sparklineWeights = {
   Bar: ["Narrow", "Medium", "Wide", "Extrawide"],
@@ -41,7 +47,7 @@ const Sparkline = styled("span", {
   compoundVariants: sparklineCompoundVariants,
 });
 
-const pdfPoints = [];
+const pdfPoints: number[] = [];
 
 const jitter = 0.01;
 const width = 0.05;
@@ -74,23 +80,34 @@ const BetaPDF = (params: BetaParams) => {
   );
 };
 
-const App = () => {
-  const max = 20;
-  const mu = 5;
-  const v = 5;
+/**
+ * dummy component to make sure things are wired up correctly
+ */
+const EncounterDisplay = () => {
+  const recording = useSelectedRecording();
 
-  const params = fit(mu, v, max);
+  return <Show when={recording?.()}>{JSON.stringify(recording?.())}</Show>;
+};
+
+const LoadingBlocker = () => {
+  const { store } = useSavedVariables();
 
   return (
-    <>
-      <ul>
-        <li>{params.alpha}</li>
-        <li>{params.beta}</li>
-        <li>{pdf(params, mu)}</li>
-      </ul>
-      <BetaPDF {...params} />
-    </>
+    <Show when={store?.().success} fallback={<FilePickerPage />}>
+      <EncounterSelector>
+        <EncounterDisplay />
+      </EncounterSelector>
+    </Show>
   );
 };
 
-render(() => <App />, document.getElementById("root"));
+const App = () => {
+  return (
+    <SavedVariablesProvider>
+      <LoadingBlocker />
+    </SavedVariablesProvider>
+  );
+};
+
+const root = document.getElementById("root");
+root && render(() => <App />, root);

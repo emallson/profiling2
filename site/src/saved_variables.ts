@@ -76,15 +76,17 @@ const encounter = z.discriminatedUnion("kind", [
   manualEncounter,
 ]);
 
+const scriptEntries = z.record(trackerData).transform((data) =>
+  Object.entries(data).map(([key, value]) => ({
+    subject: keypath.parse(key),
+    ...value,
+  }))
+);
+
 const recording = z.object({
   encounter,
   data: z.object({
-    scripts: z.record(trackerData).transform((data) =>
-      Object.entries(data).map(([key, value]) => ({
-        subject: keypath.parse(key),
-        ...value,
-      }))
-    ),
+    scripts: scriptEntries,
     onUpdateDelay: trackerData.optional(),
   }),
 });
@@ -94,7 +96,11 @@ const savedVariables = z.object({
 });
 
 export type Recording = z.infer<typeof recording>;
+export type RaidEncounter = z.infer<typeof bossEncounter>;
+export type DungeonEncounter = z.infer<typeof dungeonEncounter>;
+export type ManualEncounter = z.infer<typeof manualEncounter>;
 export type Encounter = z.infer<typeof encounter>;
+export type ScriptEntry = z.infer<typeof scriptEntries>[number];
 export type TrackerData = z.infer<typeof trackerData>;
 export type SavedVariables = z.infer<typeof savedVariables>;
 

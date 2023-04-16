@@ -10,6 +10,8 @@ import {
 } from "./SavedVariablesContext";
 import FilePickerPage from "./FilePickerPage";
 import EncounterSelector, { useSelectedRecording } from "./EncounterSelector";
+import EncounterDetails from "./EncounterDetails";
+import ScriptList from "./ScriptList";
 
 const sparklineWeights = {
   Bar: ["Narrow", "Medium", "Wide", "Extrawide"],
@@ -80,22 +82,14 @@ const BetaPDF = (params: BetaParams) => {
   );
 };
 
-/**
- * dummy component to make sure things are wired up correctly
- */
-const EncounterDisplay = () => {
-  const recording = useSelectedRecording();
-
-  return <Show when={recording?.()}>{JSON.stringify(recording?.())}</Show>;
-};
-
 const LoadingBlocker = () => {
   const { store } = useSavedVariables();
 
   return (
     <Show when={store?.().success} fallback={<FilePickerPage />}>
       <EncounterSelector>
-        <EncounterDisplay />
+        <EncounterDetails />
+        <ScriptList />
       </EncounterSelector>
     </Show>
   );

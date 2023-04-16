@@ -5,13 +5,14 @@ import {
   ParentProps,
   Show,
   createContext,
+  createMemo,
   createSignal,
   useContext,
 } from "solid-js";
-import { createStore } from "solid-js/store";
 import { Encounter, Recording, SavedVariables } from "./saved_variables";
 import { useSavedVariables } from "./SavedVariablesContext";
 import { styled } from "@macaron-css/solid";
+import { style } from "@macaron-css/core";
 
 function encounterName(encounter: Encounter): string {
   switch (encounter.kind) {
@@ -24,7 +25,7 @@ function encounterName(encounter: Encounter): string {
   }
 }
 
-function formatStartTime(time: number): string {
+export function formatTimestamp(time: number): string {
   const date = new Date(time * 1000);
 
   return Intl.DateTimeFormat(undefined, {
@@ -36,14 +37,22 @@ function formatStartTime(time: number): string {
   }).format(date);
 }
 
+const selectedStyle = style({
+  backgroundColor: "#eee",
+});
+
 const EncounterEntry = (props: {
   encounter: Encounter;
   onClick: () => void;
 }) => {
+  const recording = useSelectedRecording();
+  const style = createMemo(() =>
+    recording()?.encounter === props.encounter ? selectedStyle : undefined
+  );
   return (
-    <div onClick={() => props.onClick()}>
+    <div class={style()} onClick={() => props.onClick()}>
       <div>{encounterName(props.encounter)}</div>
-      <div>{formatStartTime(props.encounter.startTime)}</div>
+      <div>{formatTimestamp(props.encounter.startTime)}</div>
     </div>
   );
 };
@@ -81,7 +90,14 @@ const Context = createContext<{
   selectedRecording?: Accessor<Recording | undefined>;
 }>({});
 
-export const useSelectedRecording = () => useContext(Context).selectedRecording;
+export const useSelectedRecording = () => {
+  const value = createMemo(() => {
+    const recording = useContext(Context).selectedRecording;
+    return recording?.();
+  });
+
+  return value;
+};
 
 const PageLayout = styled("div", {
   base: {

@@ -1,5 +1,5 @@
 import { render } from "solid-js/web";
-import { BetaParams, fit, pdf } from "./fit_beta";
+import { BetaParams, fit, pdf } from "./beta";
 import { styled } from "@macaron-css/solid";
 
 import "../resources/sparkline-font/font-faces.css";

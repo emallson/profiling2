@@ -37,6 +37,7 @@ const trackerData = z.object({
     mean: z.number(),
     variance: z.number().optional(),
     skew: z.number().optional(),
+    samples: z.number().array().optional(),
     quantiles: z
       .record(
         z.string().refine((v) => isFinite(Number(v))),

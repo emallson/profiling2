@@ -9,10 +9,9 @@ description = {
    license = "bsd3"
 }
 build = {
-   type = "builtin",
-   modules = {
-      heap = "src/heap.lua"
-   }
+  type = "builtin",
+  modules = {
+  }
 }
 
 dependencies = {

@@ -13,10 +13,6 @@ const CenteringContainer = styled("div", {
 export default function FilePickerPage() {
   const { load, store } = useSavedVariables();
 
-  createEffect(() => {
-    console.log(store?.());
-  });
-
   return (
     <CenteringContainer>
       <div>

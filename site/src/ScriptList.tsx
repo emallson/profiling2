@@ -30,7 +30,6 @@ const densityOverlayMark = (script: ScriptEntry) => {
     script.stats.variance,
     Math.max.apply(null, script.top5)
   );
-  script.stats.skew && console.log(skew_err(params, script.stats.skew));
   const points = pdfPoints
     .map((p) => p * params.max)
     .map((p) => ({ p, d: pdf(params, p) }));
@@ -38,13 +37,40 @@ const densityOverlayMark = (script: ScriptEntry) => {
   return Plot.line(points, { x: "p", y: "d" });
 };
 
+const SIXTY_FPS_MS = 1000 / 60;
+
+const fpsTicks = Plot.tickX(
+  Array.from(Array(10).keys()).map((_, ix) => ({
+    x: ((ix + 1) * SIXTY_FPS_MS) / 10,
+  })),
+  { stroke: "red", x: "x" }
+);
+
 function renderPlot(
   script: ScriptEntry,
   max: number,
   container: HTMLElement
 ): void {
-  const chart = Plot.plot({
-    marks: [
+  const outlierMark = Plot.dot([0, 1, 2, 3, 4], {
+    x: script.top5,
+    title: (value) =>
+      `${script.top5[value].toFixed(2)}ms (${(
+        (100 * script.top5[value]) /
+        SIXTY_FPS_MS
+      ).toFixed(1)}% of 1 render @ 60 FPS)`,
+  });
+  let marks;
+  if (script.stats.samples) {
+    marks = [
+      Plot.boxX(script.stats.samples, { r: 0 }),
+      outlierMark,
+      Plot.tickX([{ max: 0 }, { max }], {
+        x: "max",
+      }),
+      fpsTicks,
+    ];
+  } else {
+    marks = [
       Plot.ruleY([script.stats.quantiles], { x1: "0.5", x2: "0.95" }),
       Plot.barX([script.stats.quantiles], {
         x1: "0.5",
@@ -55,9 +81,13 @@ function renderPlot(
       Plot.tickX([{ max: 0 }, { max }], {
         x: "max",
       }),
-      Plot.dot([0, 1, 2, 3, 4], { x: script.top5 }),
+      outlierMark,
       densityOverlayMark(script),
-    ],
+      fpsTicks,
+    ];
+  }
+  const chart = Plot.plot({
+    marks,
     x: {
       axis: null,
       domain: [0, max],
@@ -65,7 +95,7 @@ function renderPlot(
     y: {
       axis: null,
     },
-    height: 20,
+    height: 25,
     padding: 0,
   });
 
@@ -74,13 +104,13 @@ function renderPlot(
 
 export function ScriptRow(props: { script: ScriptEntry; max: number }) {
   return (
-    <tr style={{ height: "2em" }}>
+    <tr>
       <td>
         {props.script.subject.frameName}:{props.script.subject.scriptName} (
         {props.script.subject.addonName ?? "Unknown"})
       </td>
       <td>
-        <Show when={props.script.stats.quantiles}>
+        <Show when={props.script.stats.samples || props.script.stats.quantiles}>
           <div ref={renderPlot.bind(null, props.script, props.max)} />
         </Show>
       </td>

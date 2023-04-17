@@ -76,7 +76,11 @@ end
 
 ---@return number[]
 function reservoir:samples()
-  return self.data
+  local result = {}
+  for i = 1,#self.data do
+    result[i] = self.data[i]
+  end
+  return result
 end
 
 function reservoir:reset()

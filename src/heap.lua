@@ -21,7 +21,11 @@ local function newHeap(size)
 end
 
 function tinyMinHeap:contents()
-  return self.values
+  local result = {}
+  for i = 1,#self.values do
+    result[i] = self.values[i]
+  end
+  return result
 end
 
 function tinyMinHeap:is_empty()

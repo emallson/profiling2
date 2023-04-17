@@ -219,7 +219,12 @@ local function isInstrumentedFn(fn)
   return INSTRUMENTATION_FNS[fn] or false
 end
 
+--- used to detect looping SetScript calls
+--- elvui's Chat code triggers this
+local currentScriptKey = nil
+
 local function hookCreateFrame()
+  local dummyFrame = CreateFrame("Frame")
   local function hookSetScript(frame, scriptType, fn)
     local name = frame:GetName()
     local parent = frame:GetParent()
@@ -241,19 +246,31 @@ local function hookCreateFrame()
     end
 
     local frameKey = profiling2.frameKey(frame)
-    -- print('hooking frame: ' .. frameKey)
+    local key = strjoin(':', frameKey, scriptType)
+
+    local mt = getmetatable(frame)
+    local SetScript = mt and mt.__index and mt.__index.SetScript
+
+    if key == currentScriptKey and frameName(frame) ~= "Anonymous" then
+      -- print('[P2] Warning: SetScript cycle detected, abandoning frame', key, currentScriptKey)
+      currentScriptKey = nil
+      return
+    end
 
     local tracker = getScriptTracker()
     local wrappedFn = function(...) fn(...) end
-    local key = strjoin(':', frameKey, scriptType)
     profiling2.registerFunction(key, wrappedFn, tracker)
 
     local scriptWrapper = buildWrapper(tracker, wrappedFn)
 
-    frame:SetScript(scriptType, scriptWrapper)
+    currentScriptKey = key
+    if SetScript then
+      SetScript(frame, scriptType, scriptWrapper)
+    else
+      frame:SetScript(scriptType, scriptWrapper)
+    end
   end
 
-  local dummyFrame = CreateFrame("Frame")
   local dummyAnimGroup = dummyFrame:CreateAnimationGroup()
   local dummyAnim = dummyAnimGroup:CreateAnimation()
   local function hookmetatable(object)

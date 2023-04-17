@@ -51,14 +51,14 @@ function renderPlot(
   max: number,
   container: HTMLElement
 ): void {
-  const outlierMark = Plot.dot([0, 1, 2, 3, 4], {
+  const outlierMark = Plot.dot(Array.from(Array(script.top5.length).keys()), {
     x: script.top5,
     fill: "black",
     stroke: "black",
     strokeOpacity: 1,
     fillOpacity: 0.1,
     title: (value) =>
-      `${script.top5[value].toFixed(2)}ms (${(
+      `${script.top5[value]?.toFixed(2)}ms (${(
         (100 * script.top5[value]) /
         SIXTY_FPS_MS
       ).toFixed(1)}% of 1 render @ 60 FPS)`,

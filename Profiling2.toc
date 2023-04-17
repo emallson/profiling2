@@ -8,3 +8,4 @@ src\moments.lua
 src\quantiles.lua
 src\reservoir.lua
 src\lib.lua
+src\console.lua

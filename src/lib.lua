@@ -3,9 +3,10 @@
 ---@field public moment_estimator MomentEstimatorNs
 ---@field public quantile QuantileNs
 ---@field public reservoir ReservoirNs
+local ns = select(2, ...)
 
----@type string, ProfilingNs
-local thisAddonName, ns = ...
+---@type string
+local thisAddonName = select(1, ...)
 local profiling2 = {}
 
 ---Get the name of the frame for path construction. Uses GetName if possible, falls back to GetDebugName if unset.
@@ -68,7 +69,7 @@ end
 
 ---check if script profiling is enabled
 ---@return boolean
-local function isScriptProfilingEnabled()
+function ns.isScriptProfilingEnabled()
     return C_CVar.GetCVarBool("scriptProfile") or false
 end
 
@@ -197,6 +198,7 @@ local function getScriptTracker()
 end
 
 local INSTRUMENTATION_FNS = {}
+local instrumentedCount = 0
 local function buildWrapper(tracker, wrappedFn)
   local function result(...)
     local startTime = debugprofilestop()
@@ -207,6 +209,7 @@ local function buildWrapper(tracker, wrappedFn)
   end
 
   INSTRUMENTATION_FNS[result] = true
+  instrumentedCount = instrumentedCount + 1
   return result
 end
 
@@ -282,6 +285,10 @@ end
 
 local renderTracker = getScriptTracker()
 
+function renderTracker:renderCount()
+  return self.commits
+end
+
 function profiling2.buildUsageTable()
   local scripts = {}
   for key, value in pairs(trackedFunctions) do
@@ -350,7 +357,7 @@ function profiling2.startMythicPlus(mapId)
 end
 
 -- manual start/stop methods for testing in town
-function Profiling2Start()
+function ns.start()
   profiling2.resetTrackers()
   ResetCPUUsage()
   currentEncounter = {
@@ -359,7 +366,7 @@ function Profiling2Start()
   }
 end
 
-function Profiling2End()
+function ns.stop()
   if currentEncounter == nil then
     -- we didn't start an encounter
     return
@@ -391,7 +398,14 @@ function profiling2.endMythicPlus(isCompletion, mapId)
   currentMythicPlus = nil
 end
 
-if isScriptProfilingEnabled() then
+function ns.printStatus()
+  print("Profiling2 Status: " .. ((currentEncounter or currentMythicPlus) and "|cff00ff00Active|r" or "|cffff0000Inactive|r"))
+  print("scriptProfile CVar Status: " .. (ns.isScriptProfilingEnabled() and "|cff00ff00On|r" or "|cffff0000Off|r"))
+  print("Instrumented Scripts: " .. instrumentedCount)
+  print("Renders Recorded: " .. renderTracker:renderCount())
+end
+
+if ns.isScriptProfilingEnabled() then
   local frame = CreateFrame("Frame", "Profiling2_Frame")
   frame:RegisterEvent("ENCOUNTER_START")
   frame:RegisterEvent("ENCOUNTER_END")

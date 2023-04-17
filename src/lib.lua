@@ -180,7 +180,13 @@ local trackerMeta = {
 local trackers = {}
 
 ---Get a tracker. If no params provided, will be a new anonymous tracker.
----Otherwise, will be the tracker for the (frame, scriptType) combo, which is re-used across SetScript calls
+---Otherwise, will be the tracker for the (frame, scriptType) combo, which 
+---is re-used across SetScript calls.
+---
+---This may mean that you end up merging multiple different functions, but 
+---we can't rely on function identity for sameness due to the common use ofs
+---lambdas (which have distinct identities even for identical bodies).
+---
 ---@param frame any|nil
 ---@param scriptType string|nil
 ---@return ScriptTracker
@@ -211,7 +217,6 @@ local function getScriptTracker(frame, scriptType)
   return tracker
 end
 
-local INSTRUMENTATION_FNS = {}
 local instrumentedCount = 0
 local function buildWrapper(tracker, wrappedFn)
   local function result(...)
@@ -222,18 +227,12 @@ local function buildWrapper(tracker, wrappedFn)
     tracker:record(endTime - startTime)
   end
 
-  INSTRUMENTATION_FNS[result] = true
   instrumentedCount = instrumentedCount + 1
   return result
 end
 
----@param fn function
----@return boolean
-local function isInstrumentedFn(fn)
-  return INSTRUMENTATION_FNS[fn] or false
-end
-
 local function hookCreateFrame()
+  local OrigSetScript = {}
   local function hookSetScript(frame, scriptType, fn)
     local name = frame:GetName()
     local parent = frame:GetParent()
@@ -250,7 +249,7 @@ local function hookCreateFrame()
       -- print("skipping frame hook")
       return
     end
-    if fn == nil or isInstrumentedFn(fn) then
+    if fn == nil then
       return
     end
 
@@ -264,9 +263,21 @@ local function hookCreateFrame()
 
     local scriptWrapper = buildWrapper(tracker, wrappedFn)
 
-    local mt = getmetatable(frame)
-    local SetScript = mt and mt.__index and mt.__index.SetScript or frame.SetScript
-    SetScript(frame, scriptType, scriptWrapper)
+    -- we use the original SetScript method to avoid triggering loops
+    -- hooksecurefunc(t, f, h) basically works by replacing t[f] with 
+    -- `local f = t[f]; function (...) local r = f(...); h(...) return r end`
+    --
+    -- normally, when this is done the real `f` is still on the metatable __index
+    -- ...but we overwrite that by calling hooksecurefunc with the metatable __index as `t`
+    --
+    -- anyway, point being that we keep the original `f` around and use it here to 
+    -- avoid recursion because otherwise we basically have `h = function(...) h(...) end` 
+    -- and that doesn't end well
+    --
+    -- this also sidesteps several issues with other addons hooking `SetScript` 
+    -- with their own recursive hooks (ElvUI and LibQTip both do this). By using the 
+    -- original, pristine `f` we prevent this call from triggering ANY hooks.
+    OrigSetScript[frame:GetObjectType()](frame, scriptType, scriptWrapper)
   end
 
   local dummyFrame = CreateFrame("Frame")
@@ -274,6 +285,7 @@ local function hookCreateFrame()
   local dummyAnim = dummyAnimGroup:CreateAnimation()
   local function hookmetatable(object)
     local frameIndex = getmetatable(object).__index
+    OrigSetScript[object:GetObjectType()] = frameIndex.SetScript
     hooksecurefunc(frameIndex, 'SetScript', hookSetScript)
   end
   hookmetatable(dummyFrame)
@@ -344,6 +356,14 @@ function profiling2.startEncounter(encounterId, encounterName, difficultyId, gro
   }
 end
 
+local MAX_RECORDINGS = 50
+local function insertRecording(recording)
+  while #Profiling2_Storage.recordings >= MAX_RECORDINGS do
+    table.remove(Profiling2_Storage.recordings, 1)
+  end
+  table.insert(Profiling2_Storage.recordings, recording)
+end
+
 function profiling2.encounterEnd(encounterID, encounterName, difficultyID, groupSize, success)
   if currentEncounter == nil then
     -- don't do anything if we didn't see the encounter start. a mid-combat reload probably happened or we're in a key
@@ -352,7 +372,7 @@ function profiling2.encounterEnd(encounterID, encounterName, difficultyID, group
   currentEncounter.success = success == 1
   currentEncounter.endTime = time()
 
-  table.insert(Profiling2_Storage.recordings, {
+  insertRecording({
     encounter = currentEncounter,
     data = profiling2.buildUsageTable()
   })
@@ -389,7 +409,7 @@ function ns.stop()
   end
   currentEncounter.endTime = time()
 
-  table.insert(Profiling2_Storage.recordings, {
+  insertRecording({
     encounter = currentEncounter,
     data = profiling2.buildUsageTable()
   })
@@ -406,7 +426,7 @@ function profiling2.endMythicPlus(isCompletion, mapId)
 
   currentMythicPlus.success = isCompletion
   currentMythicPlus.endTime = time()
-  table.insert(Profiling2_Storage.recordings, {
+  insertRecording({
     encounter = currentMythicPlus,
     data = profiling2.buildUsageTable()
   })

@@ -30,6 +30,7 @@ local function printHelp()
   printCommand("status", "Print profiling status information")
   printCommand("enable", "Enable script profiling and reload UI.")
   printCommand("disable", "Disable script profiling and reload UI. This will also disable Profiling2's profiling hooks.")
+  printCommand("clear", "Clear stored data.")
   printCommand("teststart", "Start a test profiling session.")
   printCommand("teststop", "Stop a test profiling session.")
 end
@@ -46,6 +47,8 @@ local function handler(msg)
     disableScriptProfiling()
   elseif cmd == "status" then
     ns.printStatus()
+  elseif cmd == "clear" then
+    Profiling2_Storage = { recordings = {} }
   elseif cmd == "help" then
     printHelp()
   else

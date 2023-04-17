@@ -112,7 +112,6 @@ export default function EncounterSelector(props: ParentProps): JSX.Element {
   const [recording, setRecording] = createSignal<Recording | undefined>();
 
   const setSelection = (recording: Recording) => {
-    console.log(recording);
     setRecording(recording);
   };
 

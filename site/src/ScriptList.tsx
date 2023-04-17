@@ -20,7 +20,7 @@ for (let i = 0; i <= 1; i += width) {
   }
 }
 
-const densityOverlayMark = (script: ScriptEntry) => {
+const densityOverlayMark = (script: Pick<ScriptEntry, "stats" | "top5">) => {
   if (script.stats.variance === undefined) {
     return undefined;
   }
@@ -40,19 +40,23 @@ const densityOverlayMark = (script: ScriptEntry) => {
 const SIXTY_FPS_MS = 1000 / 60;
 
 const fpsTicks = Plot.tickX(
-  Array.from(Array(10).keys()).map((_, ix) => ({
+  Array.from(Array(9).keys()).map((_, ix) => ({
     x: ((ix + 1) * SIXTY_FPS_MS) / 10,
   })),
-  { stroke: "red", x: "x" }
+  { stroke: "#f005", x: "x" }
 );
 
 function renderPlot(
-  script: ScriptEntry,
+  script: Pick<ScriptEntry, "stats" | "top5">,
   max: number,
   container: HTMLElement
 ): void {
   const outlierMark = Plot.dot([0, 1, 2, 3, 4], {
     x: script.top5,
+    fill: "black",
+    stroke: "black",
+    strokeOpacity: 1,
+    fillOpacity: 0.1,
     title: (value) =>
       `${script.top5[value].toFixed(2)}ms (${(
         (100 * script.top5[value]) /
@@ -62,12 +66,12 @@ function renderPlot(
   let marks;
   if (script.stats.samples) {
     marks = [
+      fpsTicks,
       Plot.boxX(script.stats.samples, { r: 0 }),
       outlierMark,
       Plot.tickX([{ max: 0 }, { max }], {
         x: "max",
       }),
-      fpsTicks,
     ];
   } else {
     marks = [
@@ -127,10 +131,12 @@ export default function ScriptList() {
     const dataMax =
       Math.max.apply(
         null,
-        recording()?.data.scripts.flatMap((script) => script.top5) ?? [2 / 1.1]
+        recording()?.data.scripts.flatMap((script) => script.top5) ?? [
+          SIXTY_FPS_MS / 1.1,
+        ]
       ) * 1.1;
 
-    return Math.max(dataMax, 2);
+    return Math.max(dataMax, SIXTY_FPS_MS);
   });
   const scripts = createMemo(() => {
     const scripts = recording()?.data.scripts;

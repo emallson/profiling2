@@ -39,8 +39,10 @@ local function handler(msg)
   local cmd, rest = msg:match("^(%S*)%s*(.-)$")
   if cmd == "teststart" then
     ns.start()
+    print("Test recording started")
   elseif cmd == "teststop" then
     ns.stop()
+    print("Test recording stopped")
   elseif cmd == "enable" then
     enableScriptProfiling()
   elseif cmd == "disable" then

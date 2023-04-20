@@ -1,8 +1,7 @@
 import { SafeParseReturnType, z } from "zod";
 import * as lua from "lua-json";
 
-const strToJson = (data: string) =>
-  lua.parse(data.replace("Profiling2_Storage =", "return"));
+const strToJson = (data: string) => lua.parse(data.replace("Profiling2_Storage =", "return"));
 
 const luaString = z.string().transform(strToJson);
 
@@ -36,7 +35,7 @@ const trackerData = z.object({
   stats: z.object({
     mean: z.number(),
     variance: z.number().optional(),
-    skew: z.number().optional(),
+    skew: z.number().optional().nullable(),
     samples: z.number().array().optional(),
     quantiles: z
       .record(
@@ -54,7 +53,7 @@ const trackerData = z.object({
 
 const keypath = z.string().transform((val) => {
   const colons = val.split(":");
-  const scriptName = colons.at(-1);
+  const scriptName = colons.at(-1)!;
   let path = colons.slice(0, -1).join(":").split("/");
 
   let addonName = undefined;
@@ -64,18 +63,14 @@ const keypath = z.string().transform((val) => {
   }
 
   return {
-    addonName,
+    addonName: addonName!,
     scriptName,
-    frameName: path.at(0),
+    frameName: path.at(0)!,
     framePath: path.slice(1, -1).reverse(),
   };
 });
 
-const encounter = z.discriminatedUnion("kind", [
-  bossEncounter,
-  dungeonEncounter,
-  manualEncounter,
-]);
+const encounter = z.discriminatedUnion("kind", [bossEncounter, dungeonEncounter, manualEncounter]);
 
 const scriptEntries = z.record(trackerData).transform((data) =>
   Object.entries(data).map(([key, value]) => ({
@@ -105,8 +100,6 @@ export type ScriptEntry = z.infer<typeof scriptEntries>[number];
 export type TrackerData = z.infer<typeof trackerData>;
 export type SavedVariables = z.infer<typeof savedVariables>;
 
-export function parse(
-  data: string
-): SafeParseReturnType<string, SavedVariables> {
+export function parse(data: string): SafeParseReturnType<string, SavedVariables> {
   return luaString.pipe(savedVariables).safeParse(data);
 }

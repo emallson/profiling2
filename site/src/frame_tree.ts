@@ -115,7 +115,7 @@ export function buildScriptTree(scripts: ScriptEntry[]): Roots {
   return roots;
 }
 
-function leaves(node: TreeNode): ScriptEntry[] {
+export function leaves(node: TreeNode): ScriptEntry[] {
   if (isIntermediateNode(node)) {
     return Object.values(node.children).flatMap(leaves);
   } else {

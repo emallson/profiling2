@@ -1,5 +1,5 @@
 import { useSelectedRecording } from "./EncounterSelector";
-import { For, Show, createMemo, createSignal } from "solid-js";
+import { For, Show, createEffect, createMemo, createSignal, onMount } from "solid-js";
 import {
   IntermediateNode,
   Branches,
@@ -7,10 +7,13 @@ import {
   buildScriptTree,
   isIntermediateNode,
   joined_samples,
+  leaves,
 } from "./frame_tree";
 import { styled } from "@macaron-css/solid";
 import { createVar, fallbackVar } from "@macaron-css/core";
 import { assignInlineVars } from "@vanilla-extract/dynamic";
+import * as Plot from "@observablehq/plot";
+import * as format from "d3-format";
 
 function weight(node: TreeNode): number {
   const samples = joined_samples(node);
@@ -82,53 +85,80 @@ function DisplayBranches(props: {
   parentWeight?: number;
   selectNode: (node: TreeNode) => void;
 }) {
-  const totalWeight = createMemo(() => {
+  let container!: HTMLDivElement;
+  createEffect(() => {
     if (!props.branches) {
-      return undefined;
+      return;
     }
 
-    // due to rng we could end up with a sum of children having greater weight than the parent.
-    // deal with that case.
-    const branchWeight = Object.values(props.branches).reduce((a, b) => a + weight(b), 0);
+    const branches = Object.entries(props.branches)
+      .sort(([, nodeA], [, nodeB]) => weight(nodeB) - weight(nodeA))
+      .slice(0, 10);
 
-    if (props.parentWeight && branchWeight > props.parentWeight) {
-      return branchWeight;
-    } else {
-      return props.parentWeight ?? branchWeight;
-    }
+    const data = branches.flatMap(([key, node]) => {
+      const samples = joined_samples(node);
+
+      if (!samples) {
+        return [];
+      }
+
+      return samples.map((sample) => ({
+        value: sample,
+        key,
+      }));
+    });
+
+    const sampleCounts = Object.fromEntries(
+      branches.map(([key, node]) => [key, joined_samples(node)?.length ?? 0])
+    );
+
+    const commits = Object.fromEntries(
+      branches.map(([key, node]) => [
+        key,
+        leaves(node).reduce((sum, entry) => sum + entry.commits, 0),
+      ])
+    );
+
+    const tickFormat = format.format("~s");
+
+    const result = Plot.plot({
+      y: {
+        type: "symlog",
+        ticks: [1, 10, 100, 1000, 10000, 100000, 1000000],
+        tickFormat,
+        label: "Est. Frame Count",
+      },
+      x: {
+        domain: [0, 17],
+        label: "Processing Time (ms)",
+      },
+      color: {
+        type: "categorical",
+        legend: true,
+      },
+      marks: [
+        Plot.rectY(
+          data,
+          Plot.binX<{ fill: string }>(
+            {
+              y: {
+                reduceIndex(index: number[], values: typeof data) {
+                  const commitCount = commits[values[index[0]].key];
+                  const sampleCount = sampleCounts[values[index[0]].key];
+                  return (index.length / sampleCount) * commitCount;
+                },
+              },
+            },
+            { x: { value: "value", interval: 0.2 }, fill: "key" }
+          )
+        ),
+      ],
+    });
+
+    container.replaceChildren(result);
   });
 
-  const sortedBranches = createMemo(
-    () => props.branches && Object.values(props.branches).sort((a, b) => weight(b) - weight(a))
-  );
-  return (
-    <BranchesContainer>
-      <Show when={sortedBranches()}>
-        <For each={sortedBranches()}>
-          {(node) => (
-            <NodeContainer
-              style={assignInlineVars({
-                [widthVar]:
-                  (
-                    (Math.min(weight(node), totalWeight() ?? weight(node)) / (totalWeight() ?? 1)) *
-                    100
-                  ).toFixed(2) + "%",
-              })}
-            >
-              <DisplayNode node={node} onClick={() => props.selectNode(node)} />
-              <Show when={isIntermediateNode(node) && weight(node) > 0.02}>
-                <DisplayBranches
-                  selectNode={props.selectNode}
-                  branches={(node as IntermediateNode).children}
-                  parentWeight={weight(node)}
-                />
-              </Show>
-            </NodeContainer>
-          )}
-        </For>
-      </Show>
-    </BranchesContainer>
-  );
+  return <div ref={container} />;
 }
 
 export default function ScriptTree() {

@@ -58,7 +58,7 @@ end
 
 local function isProbablyBlizzardFrame(frame)
   local issecure, name = issecurevariable({ frame = frame }, 'frame')
-  return issecure or name == thisAddonName
+  return issecure or name == thisAddonName or name == "*** ForceTaint_Strong ***"
 end
 
 ---@param frame Frame
@@ -231,6 +231,37 @@ local function buildWrapper(tracker, wrappedFn)
   return result
 end
 
+local OBJECT_TYPES = {
+  'Frame',
+  'ArchaeologyDigSiteFrame',
+  'Browser',
+  'CheckButton',
+  'Checkout',
+  'CinematicModel',
+  'ColorSelect',
+  'Cooldown',
+  'DressUpModel',
+  -- hooking editbox disables the chat boxes
+  -- probably not very combat relevant anyway
+  -- 'EditBox',
+  'FogOfWarFrame',
+  'GameTooltip',
+  'MessageFrame',
+  'Model',
+  'ModelScene',
+  'MovieFrame',
+  'OffScreenFrame',
+  'PlayerModel',
+  'QuestPOIFrame',
+  'ScenarioPOIFrame',
+  'ScrollFrame',
+  'SimpleHTML',
+  'Slider',
+  'StatusBar',
+  'TabardModel',
+  'UnitPositionFrame',
+}
+
 local function hookCreateFrame()
   local OrigSetScript = {}
   local function hookSetScript(frame, scriptType, fn)
@@ -288,9 +319,11 @@ local function hookCreateFrame()
     OrigSetScript[object:GetObjectType()] = frameIndex.SetScript
     hooksecurefunc(frameIndex, 'SetScript', hookSetScript)
   end
-  hookmetatable(dummyFrame)
   hookmetatable(dummyAnim)
   hookmetatable(dummyAnimGroup)
+  for _, type in ipairs(OBJECT_TYPES) do
+    hookmetatable(CreateFrame(type))
+  end
 end
 
 ---@class TrackedFn
@@ -357,11 +390,50 @@ function profiling2.startEncounter(encounterId, encounterName, difficultyId, gro
 end
 
 local MAX_RECORDINGS = 50
+local LibDeflate = LibStub("LibDeflate")
+local LibSerialize = LibStub("LibSerialize")
+
+---@class Recording
+---@field encounter table
+---@field data table
+
+---@param recording Recording
 local function insertRecording(recording)
-  while #Profiling2_Storage.recordings >= MAX_RECORDINGS do
-    table.remove(Profiling2_Storage.recordings, 1)
-  end
-  table.insert(Profiling2_Storage.recordings, recording)
+  local timer
+  timer = C_Timer.NewTimer(1, function()
+    if InCombatLockdown() then
+      -- don't attempt to store data while in combat because serialization can trigger the "script
+      -- took too long" error. we have much greater limitations outside of combat. The encounter end
+      -- and CM completion events can fire while still in combat
+      return
+    end
+
+    -- stop the timer before we attempt anything. this is to prevent an infinite loop if
+    -- serialization fails
+    --
+    -- would rather lose data than brick the game
+    timer:Cancel()
+
+    -- prune the recording table
+    while #Profiling2_Storage.recordings >= MAX_RECORDINGS do
+      table.remove(Profiling2_Storage.recordings, 1)
+    end
+
+    -- record both for now to compare compressed size offline.
+    -- initial results indicate that serialization + compression is MUCH better than the naive
+    -- output
+    table.insert(Profiling2_Storage.recordings, recording)
+
+    -- we only serialize and compress the data table. this allows us to skip decompression when
+    -- handling the data in the browser, using the encounter table as metadata to determine what the
+    -- user wants to load
+    local serialized = LibSerialize:Serialize(recording.data)
+    local compressed = LibDeflate:CompressDeflate(serialized)
+    table.insert(Profiling2_Storage.recordings, {
+      encounter = recording.encounter,
+      data = compressed,
+    })
+  end)
 end
 
 function profiling2.encounterEnd(encounterID, encounterName, difficultyID, groupSize, success)
@@ -467,8 +539,9 @@ if ns.isScriptProfilingEnabled() then
       if loadedAddonName == thisAddonName then
         ---@type table
         Profiling2_Storage = Profiling2_Storage or { recordings = {} }
-        hookCreateFrame()
       end
     end
   end)
+
+  hookCreateFrame()
 end

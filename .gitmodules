@@ -1,3 +1,9 @@
 [submodule "external/vscode-wow-api"]
 	path = external/vscode-wow-api
 	url = https://github.com/Ketho/vscode-wow-api.git
+[submodule "libs/LibSerialize"]
+	path = libs/LibSerialize
+	url = git@github.com:rossnichols/LibSerialize.git
+[submodule "libs/LibDeflate"]
+	path = libs/LibDeflate
+	url = git@github.com:SafeteeWoW/LibDeflate.git

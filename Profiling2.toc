@@ -9,3 +9,7 @@ src\quantiles.lua
 src\reservoir.lua
 src\lib.lua
 src\console.lua
+
+libs\LibDeflate\LibDeflate.lua
+libs\LibSerialize\lib.xml
+libs\LibStub\LibStub.lua

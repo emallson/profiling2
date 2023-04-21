@@ -1,0 +1,4 @@
+package-as: Profiling2
+
+externals:
+  libs/LibStub: https://repos.curseforge.com/wow/libstub/trunk

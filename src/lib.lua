@@ -400,7 +400,7 @@ local LibSerialize = LibStub("LibSerialize")
 ---@param recording Recording
 local function insertRecording(recording)
   local timer
-  timer = C_Timer.NewTimer(1, function()
+  timer = C_Timer.NewTicker(1, function()
     if InCombatLockdown() then
       -- don't attempt to store data while in combat because serialization can trigger the "script
       -- took too long" error. we have much greater limitations outside of combat. The encounter end

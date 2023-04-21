@@ -1,9 +1,9 @@
 import join_data, { JoinData } from "./join_frames";
-import { ScriptEntry } from "./saved_variables";
+import { ScriptEntry, TrackerData } from "./saved_variables";
 
 export type LeafNode = {
   // we may not have any data for an intermediate node
-  self: ScriptEntry;
+  self: TrackerData;
   parent?: TreeNode;
   key: string;
 };
@@ -22,6 +22,10 @@ export type Roots = Branches;
 
 export function isIntermediateNode(node: TreeNode): node is IntermediateNode {
   return "children" in node;
+}
+
+export function isDataNode(node: TreeNode): node is LeafNode {
+  return "self" in node && node.self !== undefined;
 }
 
 function buildIntermediate(key: string, parent?: TreeNode): IntermediateNode;
@@ -115,25 +119,40 @@ export function buildScriptTree(scripts: ScriptEntry[]): Roots {
   return roots;
 }
 
-export function leaves(node: TreeNode): ScriptEntry[] {
-  if (isIntermediateNode(node)) {
-    return Object.values(node.children).flatMap(leaves);
-  } else {
+export function virtualRoot(roots: Roots, name: string): TreeNode {
+  return {
+    key: name,
+    children: roots,
+  };
+}
+
+export function leaves(node: TreeNode): TrackerData[] {
+  if (isDataNode(node)) {
     return [node.self];
+  } else {
+    return Object.values(node.children).flatMap(leaves);
   }
 }
 
 export function joined_samples(node: TreeNode): number[] | undefined {
-  if (isIntermediateNode(node)) {
+  if (isDataNode(node)) {
+    return node.self.stats.samples;
+  } else if (isIntermediateNode(node)) {
     if (!node.joined_samples) {
       const scripts = leaves(node);
       if (scripts.some((script) => !script.stats.samples)) {
         return undefined; // don't attempt to do a partial join
       }
-      node.joined_samples = join_data(scripts as JoinData);
+
+      if (scripts.length === 1) {
+        // only one child, use its samples directly
+        node.joined_samples = scripts[0].stats.samples;
+      } else {
+        node.joined_samples = join_data(scripts as JoinData);
+      }
     }
     return node.joined_samples;
   } else {
-    return node.self.stats.samples;
+    return undefined;
   }
 }

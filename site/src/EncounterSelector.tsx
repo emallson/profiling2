@@ -14,7 +14,7 @@ import { useSavedVariables } from "./SavedVariablesContext";
 import { styled } from "@macaron-css/solid";
 import { style } from "@macaron-css/core";
 
-function encounterName(encounter: Encounter): string {
+export function encounterName(encounter: Encounter): string {
   switch (encounter.kind) {
     case "raid":
       return encounter.encounterName;
@@ -41,10 +41,7 @@ const selectedStyle = style({
   backgroundColor: "#eee",
 });
 
-const EncounterEntry = (props: {
-  encounter: Encounter;
-  onClick: () => void;
-}) => {
+const EncounterEntry = (props: { encounter: Encounter; onClick: () => void }) => {
   const recording = useSelectedRecording();
   const style = createMemo(() =>
     recording()?.encounter === props.encounter ? selectedStyle : undefined

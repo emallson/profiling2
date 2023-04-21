@@ -5,8 +5,7 @@ import { SavedVariablesProvider, useSavedVariables } from "./SavedVariablesConte
 import FilePickerPage from "./FilePickerPage";
 import EncounterSelector from "./EncounterSelector";
 import EncounterDetails from "./EncounterDetails";
-import ScriptList from "./ScriptList";
-import ScriptTree from "./ScriptTree";
+import { RootSummary } from "./NodeSummary";
 
 const LoadingBlocker = () => {
   const { store } = useSavedVariables();
@@ -15,8 +14,7 @@ const LoadingBlocker = () => {
     <Show when={store?.().success} fallback={<FilePickerPage />}>
       <EncounterSelector>
         <EncounterDetails />
-        <ScriptTree />
-        <ScriptList />
+        <RootSummary />
       </EncounterSelector>
     </Show>
   );

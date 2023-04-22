@@ -428,7 +428,7 @@ local function insertRecording(recording)
     -- handling the data in the browser, using the encounter table as metadata to determine what the
     -- user wants to load
     local serialized = LibSerialize:Serialize(recording.data)
-    local compressed = LibDeflate:CompressDeflate(serialized)
+    local compressed = LibDeflate:EncodeForPrint(LibDeflate:CompressDeflate(serialized))
     table.insert(Profiling2_Storage.recordings, {
       encounter = recording.encounter,
       data = compressed,

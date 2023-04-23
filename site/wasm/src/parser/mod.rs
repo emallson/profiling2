@@ -1,9 +1,5 @@
 /// Rather than embed a whole lua parser (of which we need very little), use a basic nom parser for the saved variables table
-use std::{
-    borrow::{Cow},
-    collections::HashMap,
-    num::TryFromIntError,
-};
+use std::{borrow::Cow, collections::HashMap, num::TryFromIntError};
 
 use nom::{
     branch::alt,
@@ -482,7 +478,7 @@ pub enum SavedVariablesError {
     ParseError { message: String },
     #[error("Unable to decompress recording data: {0}")]
     DecompressionError(#[from] DecompressionError),
-    #[error("Unable to parse LibSerialize data: {0}")]
+    #[error("Unable to parse LibSerialize data: {0:?}")]
     DeserializeError(deserialize::SerializeParseError),
     #[error("Unable to cast number from signed to unsigned. {0}")]
     SignCastError(#[from] TryFromIntError),
@@ -548,7 +544,7 @@ pub fn parse_compressed_recording<'a>(
 mod test {
     use nom::combinator::complete;
 
-    use crate::parser::parse_compressed_recording;
+    use crate::parser::{decompress, parse_compressed_recording, Recording, RecordingData};
 
     use super::SavedVariables;
 
@@ -651,6 +647,20 @@ mod test {
         assert!(result.is_ok());
 
         let mut result = result.unwrap();
+        assert_eq!(result.recordings.len(), 2);
+        match result.recordings.get(1) {
+            Some(Recording {
+                data: RecordingData::Unparsed(data),
+                ..
+            }) => {
+                assert_eq!(data.len(), 9872);
+                let decoded = decompress::decode_for_print(data).expect("to decode successfully");
+                assert_eq!(decoded.len(), 7404);
+                let decompressed = decompress(data).expect("to decode + decompress successfully");
+                assert_eq!(decompressed.len(), 25029);
+            }
+            _ => assert!(false),
+        };
 
         for recording in &mut result.recordings {
             match &recording.data {

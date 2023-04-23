@@ -35,7 +35,7 @@ pub enum DecompressionError {
 /// Port of LibDeflate:DecodeForPrint
 ///
 /// Outputs a vector of bytes.
-fn decode_for_print(input: &str) -> Result<Vec<u8>, DecompressionError> {
+pub(super) fn decode_for_print(input: &str) -> Result<Vec<u8>, DecompressionError> {
     let mut result = Vec::new();
     let bytes = input.as_bytes();
     let (major, minor) = bytes.split_at(bytes.len() - 4);

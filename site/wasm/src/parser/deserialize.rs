@@ -1,8 +1,12 @@
 use std::{
     any::type_name,
     borrow::Cow,
-    collections::HashMap,
+    cell::RefCell,
+    collections::{BTreeMap, HashMap},
     fmt::{Debug, Display},
+    hash::Hash,
+    ops::{Deref, DerefMut, RangeFrom},
+    rc::Rc,
 };
 
 use bitvec::{macros::internal::funty::Integral, prelude::*};
@@ -11,11 +15,11 @@ use nom::{
     branch::alt,
     bytes::complete::{tag, take},
     combinator::{complete, cut, flat_map, map, map_opt, map_res, value, verify},
-    error::context,
+    error::{context, ErrorKind, FromExternalError, VerboseError, VerboseErrorKind},
     multi::{fold_many_m_n, many_m_n},
     number::{self, complete::be_f64},
     sequence::{pair, preceded, tuple},
-    Offset,
+    InputIter, InputLength, InputTake, Offset, Slice,
 };
 use num_derive::FromPrimitive;
 use num_traits::cast::FromPrimitive;
@@ -27,15 +31,138 @@ const DESERIALIZATION_VERSION: u8 = 2;
 type Bytes<'a> = &'a [u8];
 type Byte = BitArray<u8, Lsb0>;
 
-type IResult<'a, O> = nom::IResult<Bytes<'a>, O, nom::error::VerboseError<Bytes<'a>>>;
+#[derive(Clone, Debug)]
+struct ValueRefTable<T> {
+    by_index: Vec<T>,
+    // value table seems intended for serialization, shouldn't need for deser
+    // by_value: HashMap<T, usize>,
+}
 
-fn byte(input: Bytes) -> IResult<BitArray<u8, Lsb0>> {
-    map(take::<u8, Bytes, _>(1u8), |bytes| {
-        BitArray::<u8, Lsb0>::from(bytes[0])
+#[derive(Clone, Debug)]
+struct State<'a> {
+    string_refs: RefCell<ValueRefTable<Cow<'a, str>>>,
+    table_refs: RefCell<ValueRefTable<Table<'a>>>,
+}
+
+impl<'a> State<'a> {
+    fn new<'b>() -> State<'b> {
+        State {
+            string_refs: RefCell::new(ValueRefTable { by_index: vec![] }),
+            table_refs: RefCell::new(ValueRefTable { by_index: vec![] }),
+        }
+    }
+
+    fn add_str_ref(&self, value: Cow<'a, str>) {
+        self.string_refs.borrow_mut().by_index.push(value);
+    }
+    fn add_table_ref(&self, value: Table<'a>) {
+        self.table_refs.borrow_mut().by_index.push(value);
+    }
+
+    fn get_str_ref(&self, key: usize) -> Option<Cow<'a, str>> {
+        self.string_refs.borrow().by_index.get(key - 1).cloned()
+    }
+
+    fn get_table_ref(&self, key: usize) -> Option<Table<'a>> {
+        self.table_refs.borrow().by_index.get(key - 1).cloned()
+    }
+}
+
+#[derive(Clone, Debug)]
+struct ParserState<'a> {
+    input: Bytes<'a>,
+    state: Rc<State<'a>>,
+}
+
+impl<'a> ParserState<'a> {
+    fn new<'b>(input: Bytes<'b>) -> ParserState<'b> {
+        ParserState {
+            input,
+            state: Rc::new(State::new()),
+        }
+    }
+}
+
+impl<'a> InputIter for ParserState<'a> {
+    type Item = u8;
+
+    type Iter = <Bytes<'a> as InputIter>::Iter;
+    type IterElem = <Bytes<'a> as InputIter>::IterElem;
+
+    fn iter_indices(&self) -> Self::Iter {
+        self.input.iter_indices()
+    }
+
+    fn iter_elements(&self) -> Self::IterElem {
+        self.input.iter_elements()
+    }
+
+    fn position<P>(&self, predicate: P) -> Option<usize>
+    where
+        P: Fn(Self::Item) -> bool,
+    {
+        self.input.position(predicate)
+    }
+
+    fn slice_index(&self, count: usize) -> Result<usize, nom::Needed> {
+        self.input.slice_index(count)
+    }
+}
+
+impl<'a> Offset for ParserState<'a> {
+    fn offset(&self, second: &Self) -> usize {
+        self.input.offset(second.input)
+    }
+}
+
+impl<'a> InputTake for ParserState<'a> {
+    fn take(&self, count: usize) -> Self {
+        ParserState {
+            input: self.input.take(count),
+            state: self.state.clone(),
+        }
+    }
+
+    fn take_split(&self, count: usize) -> (Self, Self) {
+        let (left, right) = self.input.take_split(count);
+
+        (
+            ParserState {
+                input: left,
+                state: self.state.clone(),
+            },
+            ParserState {
+                input: right,
+                state: self.state.clone(),
+            },
+        )
+    }
+}
+
+impl<'a> InputLength for ParserState<'a> {
+    fn input_len(&self) -> usize {
+        self.input.input_len()
+    }
+}
+
+impl<'a> Slice<RangeFrom<usize>> for ParserState<'a> {
+    fn slice(&self, range: RangeFrom<usize>) -> Self {
+        ParserState {
+            input: self.input.slice(range),
+            state: self.state.clone(),
+        }
+    }
+}
+
+type IResult<'a, O> = nom::IResult<ParserState<'a>, O, nom::error::VerboseError<ParserState<'a>>>;
+
+fn byte(input: ParserState) -> IResult<BitArray<u8, Lsb0>> {
+    map(take::<u8, _, _>(1u8), |bytes: ParserState| {
+        BitArray::<u8, Lsb0>::from(bytes.input[0])
     })(input)
 }
 
-fn version_byte(input: Bytes) -> IResult<bool> {
+fn version_byte(input: ParserState) -> IResult<bool> {
     value(
         true,
         verify(byte, |b: &BitArray<u8, Lsb0>| {
@@ -48,12 +175,12 @@ fn version_byte(input: Bytes) -> IResult<bool> {
 fn tagged_byte<'a>(
     type_tag: BitArray<[u8; 1], Lsb0>,
     len: usize,
-) -> impl FnMut(Bytes<'a>) -> IResult<'a, Byte> {
+) -> impl FnMut(ParserState<'a>) -> IResult<'a, Byte> {
     move |input| verify(byte, |byte: &Byte| byte[0..len] == type_tag[0..len])(input)
 }
 
 /// Format: LLLL S100 HHHH HHHH
-fn deserialize_medint(input: Bytes) -> IResult<Value> {
+fn deserialize_medint(input: ParserState) -> IResult<Value> {
     map(
         tuple((tagged_byte(bitarr![const u8, Lsb0; 0, 0, 1], 3), byte)),
         |(low, high)| {
@@ -71,7 +198,7 @@ fn deserialize_medint(input: Bytes) -> IResult<Value> {
 }
 
 /// Format: NNNN NNN1
-fn deserialize_ushort(input: Bytes) -> IResult<Value> {
+fn deserialize_ushort(input: ParserState) -> IResult<Value> {
     map(tagged_byte(bitarr![const u8, Lsb0; 1], 1), |bits| {
         Value::Int(bits[1..].load::<u8>() as i64)
     })(input)
@@ -92,7 +219,7 @@ struct SmallObjectHeader {
 }
 
 /// Format: CCCC TT10
-fn small_object_header(input: Bytes) -> IResult<SmallObjectHeader> {
+fn small_object_header(input: ParserState) -> IResult<SmallObjectHeader> {
     map(
         tagged_byte(bitarr![const u8, Lsb0; 0, 1], 2),
         |byte: Byte| SmallObjectHeader {
@@ -103,22 +230,22 @@ fn small_object_header(input: Bytes) -> IResult<SmallObjectHeader> {
 }
 
 /// Read a `count`-byte string. This assumes things are already aligned correctly.
-fn string(count: u32) -> impl FnMut(Bytes) -> IResult<Cow<str>> {
+fn string(count: u32) -> impl FnMut(ParserState) -> IResult<Cow<str>> {
     // TODO: AddReference calls?
     move |input| {
-        map_res(take(count), |bytes: Bytes| {
-            core::str::from_utf8(bytes).map(Cow::Borrowed)
+        map_res(take(count), |bytes: ParserState| {
+            core::str::from_utf8(bytes.input).map(Cow::Borrowed)
         })(input)
     }
 }
 
 /// Read `count` objects into an array.
-fn array(entry_count: u32) -> impl FnMut(Bytes) -> IResult<Vec<Value>> {
+fn array(entry_count: u32) -> impl FnMut(ParserState) -> IResult<Vec<Value>> {
     move |input| many_m_n(entry_count as usize, entry_count as usize, any_object)(input)
 }
 
 /// Read `count` keys from a table into a hashmap.
-fn table(entry_count: u32) -> impl FnMut(Bytes) -> IResult<HashMap<Cow<str>, Value>> {
+fn table(entry_count: u32) -> impl FnMut(ParserState) -> IResult<HashMap<Cow<str>, Value>> {
     move |input| {
         fold_many_m_n(
             entry_count as usize,
@@ -152,7 +279,7 @@ fn destructure_mixed_counts(c: u32) -> (u32, u32) {
 
 /// Mixed table (array and keyed parts). `count` is actually bits, but I realized late and haven't
 /// gone back to fix it yet. FIXME
-fn mixed_table(mixed_counts: u32) -> impl FnMut(Bytes) -> IResult<Value> {
+fn mixed_table(mixed_counts: u32) -> impl FnMut(ParserState) -> IResult<Value> {
     let (array_count, keyed_count) = destructure_mixed_counts(mixed_counts);
     move |input| {
         map(
@@ -167,19 +294,67 @@ fn mixed_table(mixed_counts: u32) -> impl FnMut(Bytes) -> IResult<Value> {
     }
 }
 
-fn deserialize_small_object(input: Bytes) -> IResult<Value> {
+fn store_table_ref<'a>(
+    mut parser: impl FnMut(ParserState<'a>) -> IResult<Value<'a>>,
+) -> impl FnMut(ParserState<'a>) -> IResult<Value<'a>> {
+    move |input| {
+        let (output, result) = parser(input)?;
+        match &result {
+            Value::Table(table) => output.state.add_table_ref(table.clone()),
+            _ => {}
+        }
+        Ok((output, result))
+    }
+}
+
+fn table_ref(key: usize) -> impl FnMut(ParserState) -> IResult<Value> {
+    move |input| match input.state.get_table_ref(key) {
+        None => Err(nom::Err::Failure(VerboseError::from_external_error(
+            input,
+            ErrorKind::MapOpt,
+            DeserializationError::MissingRef(key),
+        ))),
+        Some(table) => Ok((input, Value::Table(table.clone()))),
+    }
+}
+
+fn store_string_ref<'a>(
+    mut parser: impl FnMut(ParserState<'a>) -> IResult<Value<'a>>,
+) -> impl FnMut(ParserState<'a>) -> IResult<Value<'a>> {
+    move |input| {
+        let (output, result) = parser(input)?;
+        match &result {
+            Value::String(str) => output.state.add_str_ref(str.clone()),
+            _ => {}
+        }
+        Ok((output, result))
+    }
+}
+
+fn string_ref(key: usize) -> impl FnMut(ParserState) -> IResult<Value> {
+    move |input| match input.state.get_str_ref(key) {
+        None => Err(nom::Err::Failure(VerboseError::from_external_error(
+            input,
+            ErrorKind::MapOpt,
+            DeserializationError::MissingRef(key),
+        ))),
+        Some(string) => Ok((input, Value::String(string.clone()))),
+    }
+}
+
+fn deserialize_small_object(input: ParserState) -> IResult<Value> {
     let (rest, SmallObjectHeader { count, type_tag }) = small_object_header(input)?;
     println!("small {:?} ({})", type_tag, count);
 
     match type_tag {
-        SmallObjectType::String => cut(map(string(count), Value::String))(rest),
-        SmallObjectType::Array => {
-            cut(map(array(count), |array| Value::Table(Table::Array(array))))(rest)
-        }
-        SmallObjectType::Table => {
-            cut(map(table(count), |map| Value::Table(Table::Named(map))))(rest)
-        }
-        SmallObjectType::Mixed => cut(mixed_table(count))(rest),
+        SmallObjectType::String => store_string_ref(cut(map(string(count), Value::String)))(rest),
+        SmallObjectType::Array => store_table_ref(cut(map(array(count), |array| {
+            Value::Table(Table::Array(array))
+        })))(rest),
+        SmallObjectType::Table => store_table_ref(cut(map(table(count), |map| {
+            Value::Table(Table::Named(map))
+        })))(rest),
+        SmallObjectType::Mixed => store_table_ref(cut(mixed_table(count)))(rest),
     }
 }
 
@@ -246,13 +421,15 @@ impl LargeObjectHeader {
 }
 
 /// Format: TTTT T000
-fn large_object_header(input: Bytes) -> IResult<LargeObjectHeader> {
+fn large_object_header(input: ParserState) -> IResult<LargeObjectHeader> {
     map_opt(tagged_byte(bitarr![const u8, Lsb0; 0, 0, 0], 3), |tag| {
         LargeObjectHeader::from_u8(tag[3..8].load())
     })(input)
 }
 
-fn int<'a, T: Integral + FromPrimitive + 'a>(bytes: u8) -> impl FnMut(Bytes<'a>) -> IResult<'a, T> {
+fn int<'a, T: Integral + FromPrimitive + 'a>(
+    bytes: u8,
+) -> impl FnMut(ParserState<'a>) -> IResult<'a, T> {
     match bytes {
         1 => move |input| map_opt(number::complete::be_u8, FromPrimitive::from_u8)(input),
         2 => move |input| map_opt(number::complete::be_u16, FromPrimitive::from_u16)(input),
@@ -263,14 +440,14 @@ fn int<'a, T: Integral + FromPrimitive + 'a>(bytes: u8) -> impl FnMut(Bytes<'a>)
     }
 }
 
-fn float(input: Bytes) -> IResult<f64> {
+fn float(input: ParserState) -> IResult<f64> {
     be_f64(input)
 }
 
-fn float_str(count: u8) -> impl FnMut(Bytes) -> IResult<f64> {
+fn float_str(count: u8) -> impl FnMut(ParserState) -> IResult<f64> {
     move |input| {
-        map_res(take(count), |bytes| {
-            core::str::from_utf8(bytes)
+        map_res(take(count), |bytes: ParserState| {
+            core::str::from_utf8(bytes.input)
                 .map_err(|_err| DeserializationError::Utf8Error)?
                 .parse::<f64>()
                 .map_err(|err| DeserializationError::StrFloatError(err))
@@ -279,8 +456,8 @@ fn float_str(count: u8) -> impl FnMut(Bytes) -> IResult<f64> {
 }
 
 fn trace<'a, O: Debug>(
-    mut inner: impl FnMut(Bytes<'a>) -> IResult<'a, O>,
-) -> impl FnMut(Bytes<'a>) -> IResult<'a, O> {
+    mut inner: impl FnMut(ParserState<'a>) -> IResult<'a, O>,
+) -> impl FnMut(ParserState<'a>) -> IResult<'a, O> {
     move |input| {
         let (rest, res) = inner(input)?;
         println!("{:?}", res);
@@ -288,7 +465,7 @@ fn trace<'a, O: Debug>(
     }
 }
 
-fn deserialize_large_object(input: Bytes) -> IResult<Value> {
+fn deserialize_large_object(input: ParserState) -> IResult<Value> {
     let (rest, header) = large_object_header(input)?;
 
     println!("large {:?}", header);
@@ -303,27 +480,36 @@ fn deserialize_large_object(input: Bytes) -> IResult<Value> {
             cut(map(int(val.bytes()), |v: i64| Value::Int(-v)))(rest)
         }
         val @ (Str8 | Str16 | Str24) => {
-            cut(map(flat_map(int(val.bytes()), string), Value::String))(rest)
+            store_string_ref(cut(map(flat_map(int(val.bytes()), string), Value::String)))(rest)
         }
-        val @ (Table8 | Table16 | Table24) => cut(map(flat_map(int(val.bytes()), table), |map| {
-            Value::Table(Table::Named(map))
-        }))(rest),
-        val @ (Array8 | Array16 | Array24) => cut(map(flat_map(int(val.bytes()), array), |arr| {
-            Value::Table(Table::Array(arr))
-        }))(rest),
-        val @ (Mixed8 | Mixed16 | Mixed24) => cut(flat_map(int(val.bytes()), mixed_table))(rest),
+        val @ (Table8 | Table16 | Table24) => {
+            store_table_ref(cut(map(flat_map(int(val.bytes()), table), |map| {
+                Value::Table(Table::Named(map))
+            })))(rest)
+        }
+        val @ (Array8 | Array16 | Array24) => {
+            store_table_ref(cut(map(flat_map(int(val.bytes()), array), |arr| {
+                Value::Table(Table::Array(arr))
+            })))(rest)
+        }
+        val @ (Mixed8 | Mixed16 | Mixed24) => {
+            store_table_ref(cut(flat_map(int(val.bytes()), mixed_table)))(rest)
+        }
         Float => cut(map(float, Value::Float))(rest),
         val @ FloatStrPos => cut(map(flat_map(int(val.bytes()), float_str), Value::Float))(rest),
         val @ FloatStrNeg => cut(map(flat_map(int(val.bytes()), float_str), |v| {
             Value::Float(-v)
         }))(rest),
-        StringRef8 | StringRef16 | StringRef24 | TableRef8 | TableRef16 | TableRef24 => {
-            unimplemented!("refs are not implemented yet")
+        val @ (TableRef8 | TableRef16 | TableRef24) => {
+            cut(flat_map(int(val.bytes()), table_ref))(rest)
+        }
+        val @ (StringRef8 | StringRef16 | StringRef24) => {
+            cut(flat_map(int(val.bytes()), string_ref))(rest)
         }
     }
 }
 
-fn any_object(input: Bytes) -> IResult<Value> {
+fn any_object(input: ParserState) -> IResult<Value> {
     context(
         "no object type matched",
         alt((
@@ -335,8 +521,8 @@ fn any_object(input: Bytes) -> IResult<Value> {
     )(input)
 }
 
-fn deserialize_internal(input: Bytes) -> IResult<Value> {
-    preceded(version_byte, any_object)(input)
+fn deserialize_internal(input: ParserState) -> IResult<Value> {
+    complete(preceded(version_byte, any_object))(input)
 }
 
 #[derive(thiserror::Error, Debug)]
@@ -345,6 +531,8 @@ pub enum DeserializationError {
     Utf8Error,
     #[error("Unable to decode string-represented float")]
     StrFloatError(#[from] std::num::ParseFloatError),
+    #[error("Reference to missing table or string (key: {0})")]
+    MissingRef(usize),
 }
 
 #[derive(Debug)]
@@ -352,8 +540,9 @@ pub struct SerializeParseError {
     repr: Vec<String>,
 }
 
-pub fn deserialize<'a: 'b, 'b>(input: &'a Vec<u8>) -> Result<Value<'b>, SerializeParseError> {
-    match deserialize_internal(input) {
+pub fn deserialize<'a: 'b, 'b>(input: &'a [u8]) -> Result<Value<'b>, SerializeParseError> {
+    let state = ParserState::new(input);
+    match deserialize_internal(state) {
         Err(err) => match err {
             nom::Err::Incomplete(_) => {
                 unreachable!("cannot reach this point due to complete combinator")
@@ -362,7 +551,9 @@ pub fn deserialize<'a: 'b, 'b>(input: &'a Vec<u8>) -> Result<Value<'b>, Serializ
                 repr: err
                     .errors
                     .into_iter()
-                    .map(|(input, kind)| format!("{:?} in byte {}", kind, input.offset(&input) / 8))
+                    .map(|(inner, kind)| {
+                        format!("{:?} in byte {}", kind, input.offset(inner.input))
+                    })
                     .collect(),
             }),
         },
@@ -383,35 +574,35 @@ mod test {
     #[test]
     fn test_deserialize_int() {
         let data = [0x01, 0x24, 0x4d];
-        let (_, result) = super::deserialize_internal(&data).unwrap();
+        let result = super::deserialize(&data).unwrap();
         assert_eq!(result, Value::Int(1234));
     }
 
     #[test]
     fn test_deserialize_negative_int() {
         let data = [0x01, 0x7c, 0x1a];
-        let (_, result) = super::deserialize_internal(&data).unwrap();
+        let result = super::deserialize(&data).unwrap();
         assert_eq!(result, Value::Int(-423));
     }
 
     #[test]
     fn test_deserialize_short() {
         let data = [0x01, 0x0b];
-        let (_, result) = super::deserialize_internal(&data).unwrap();
+        let result = super::deserialize(&data).unwrap();
         assert_eq!(result, Value::Int(5));
     }
 
     #[test]
     fn test_deserialize_string() {
         let data = [0x01, 0x32, 0x66, 0x6f, 0x6f];
-        let (_, result) = super::deserialize_internal(&data).unwrap();
+        let result = super::deserialize(&data).unwrap();
         assert_eq!(result, Value::String(Cow::Borrowed("foo")),);
     }
 
     #[test]
     fn test_deserialize_array() {
         let data = [0x01, 0x3a, 0x03, 0x32, 0x66, 0x6f, 0x6f, 0x07];
-        let (_, result) = super::deserialize_internal(&data).unwrap();
+        let result = super::deserialize(&data).unwrap();
         assert_eq!(
             result,
             Value::Table(Table::Array(vec![
@@ -433,7 +624,7 @@ mod test {
             0x30, 0x38, 0x42, 0x30, 0x2e, 0x39, 0x39, 0x50, 0x3, 0x30, 0x2e, 0x31, 0x42, 0x30,
             0x2e, 0x37, 0x35, 0x50, 0x4, 0x30, 0x2e, 0x30, 0x36,
         ];
-        let (_, result) = super::deserialize_internal(&data).unwrap();
+        let result = super::deserialize(&data).unwrap();
         assert_eq!(
             result,
             Value::Table(Table::Named(hash_map! {

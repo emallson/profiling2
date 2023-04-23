@@ -61,7 +61,7 @@ fn deserialize_medint(input: Bytes) -> IResult<Value> {
             result[4..12] |= high;
             result[0..4] |= &low[4..8];
 
-            println!("{} {} {}", result, &*high, &*low);
+            // println!("{} {} {}", result, &*high, &*low);
 
             let sign = if low[3] { -1 } else { 1 };
 
@@ -172,13 +172,13 @@ fn deserialize_small_object(input: Bytes) -> IResult<Value> {
     println!("small {:?} ({})", type_tag, count);
 
     match type_tag {
-        SmallObjectType::String => trace(cut(map(string(count), Value::String)))(rest),
+        SmallObjectType::String => cut(map(string(count), Value::String))(rest),
         SmallObjectType::Array => {
             cut(map(array(count), |array| Value::Table(Table::Array(array))))(rest)
         }
-        SmallObjectType::Table => trace(cut(map(table(count), |map| {
-            Value::Table(Table::Named(map))
-        })))(rest),
+        SmallObjectType::Table => {
+            cut(map(table(count), |map| Value::Table(Table::Named(map))))(rest)
+        }
         SmallObjectType::Mixed => cut(mixed_table(count))(rest),
     }
 }
@@ -263,9 +263,19 @@ fn int<'a, T: Integral + FromPrimitive + 'a>(bytes: u8) -> impl FnMut(Bytes<'a>)
     }
 }
 
-// TODO: this is broken and probably the most important one
 fn float(input: Bytes) -> IResult<f64> {
     be_f64(input)
+}
+
+fn float_str(count: u8) -> impl FnMut(Bytes) -> IResult<f64> {
+    move |input| {
+        map_res(take(count), |bytes| {
+            core::str::from_utf8(bytes)
+                .map_err(|_err| DeserializationError::Utf8Error)?
+                .parse::<f64>()
+                .map_err(|err| DeserializationError::StrFloatError(err))
+        })(input)
+    }
 }
 
 fn trace<'a, O: Debug>(
@@ -302,9 +312,11 @@ fn deserialize_large_object(input: Bytes) -> IResult<Value> {
             Value::Table(Table::Array(arr))
         }))(rest),
         val @ (Mixed8 | Mixed16 | Mixed24) => cut(flat_map(int(val.bytes()), mixed_table))(rest),
-        Float => trace(cut(map(float, Value::Float)))(rest),
-        FloatStrPos => unimplemented!(),
-        FloatStrNeg => unimplemented!(),
+        Float => cut(map(float, Value::Float))(rest),
+        val @ FloatStrPos => cut(map(flat_map(int(val.bytes()), float_str), Value::Float))(rest),
+        val @ FloatStrNeg => cut(map(flat_map(int(val.bytes()), float_str), |v| {
+            Value::Float(-v)
+        }))(rest),
         StringRef8 | StringRef16 | StringRef24 | TableRef8 | TableRef16 | TableRef24 => {
             unimplemented!("refs are not implemented yet")
         }
@@ -325,6 +337,14 @@ fn any_object(input: Bytes) -> IResult<Value> {
 
 fn deserialize_internal(input: Bytes) -> IResult<Value> {
     preceded(version_byte, any_object)(input)
+}
+
+#[derive(thiserror::Error, Debug)]
+pub enum DeserializationError {
+    #[error("Unable to decode utf8 string")]
+    Utf8Error,
+    #[error("Unable to decode string-represented float")]
+    StrFloatError(#[from] std::num::ParseFloatError),
 }
 
 #[derive(Debug)]
@@ -352,6 +372,8 @@ pub fn deserialize<'a: 'b, 'b>(input: &'a Vec<u8>) -> Result<Value<'b>, Serializ
 
 #[cfg(test)]
 mod test {
+    use map_macro::hash_map;
+    use pretty_assertions::{assert_eq, assert_ne};
     use std::{borrow::Cow, collections::HashMap};
 
     use bitvec::prelude::*;
@@ -412,6 +434,19 @@ mod test {
             0x2e, 0x37, 0x35, 0x50, 0x4, 0x30, 0x2e, 0x30, 0x36,
         ];
         let (_, result) = super::deserialize_internal(&data).unwrap();
-        assert_eq!(result, Value::Table(Table::Named(HashMap::new())))
+        assert_eq!(
+            result,
+            Value::Table(Table::Named(hash_map! {
+              Cow::Borrowed("skew") => Value::Float(-0.23456),
+              Cow::Borrowed("mean") => Value::Float(0.05001),
+              Cow::Borrowed("samples") => Value::Table(Table::Array(vec![Value::Int(1), Value::Int(2), Value::Int(3), Value::Int(4)])),
+              Cow::Borrowed("quantiles") => Value::Table(Table::Named(hash_map! {
+                Cow::Borrowed("0.5") => Value::Float(0.05),
+                Cow::Borrowed("0.75") => Value::Float(0.06),
+                Cow::Borrowed("0.95") => Value::Float(0.08),
+                Cow::Borrowed("0.99") => Value::Float(0.1),
+              }))
+            }))
+        )
     }
 }

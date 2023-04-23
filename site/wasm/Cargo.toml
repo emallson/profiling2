@@ -22,3 +22,7 @@ web-sys = {version = "0.3.61", features = ["Blob", "FileReaderSync"]}
 
 [profile.release]
 opt-level = "s"
+
+[dev-dependencies]
+map-macro = "0.2.6"
+pretty_assertions = "1.3.0"

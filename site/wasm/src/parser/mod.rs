@@ -15,6 +15,7 @@ use nom::{
 use self::decompress::{decompress, DecompressionError};
 
 mod decompress;
+mod deserialize;
 
 type IResult<'a, O> = nom::IResult<&'a str, O, VerboseError<&'a str>>;
 

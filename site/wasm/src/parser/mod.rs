@@ -1,10 +1,18 @@
 /// Rather than embed a whole lua parser (of which we need very little), use a basic nom parser for the saved variables table
-use std::collections::HashMap;
+use std::{
+    borrow::{Borrow, Cow},
+    cell::{Ref, RefCell},
+    collections::HashMap,
+    hash::Hash,
+    num::TryFromIntError,
+    ops::Deref,
+    rc::Rc,
+};
 
 use nom::{
     branch::alt,
     bytes::complete::{escaped, tag, take_while1},
-    character::complete::{line_ending, multispace1, none_of, one_of, u64 as parse_u64},
+    character::complete::{i64 as parse_i64, line_ending, multispace1, none_of, one_of},
     combinator::{complete, eof, map, not, opt, recognize},
     error::{convert_error, VerboseError},
     multi::{fold_many0, many0, separated_list1},
@@ -12,7 +20,10 @@ use nom::{
     sequence::{delimited, separated_pair, terminated},
 };
 
-use self::decompress::{decompress, DecompressionError};
+use self::{
+    decompress::{decompress, DecompressionError},
+    deserialize::deserialize,
+};
 
 mod decompress;
 mod deserialize;
@@ -20,13 +31,13 @@ mod deserialize;
 type IResult<'a, O> = nom::IResult<&'a str, O, VerboseError<&'a str>>;
 
 /// Any (supported) value type.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Value<'a> {
     Nil,
     Bool(bool),
-    Int(u64),
+    Int(i64),
     Float(f64),
-    String(&'a str),
+    String(Cow<'a, str>),
     Table(Table<'a>),
 }
 
@@ -42,7 +53,7 @@ fn boolean(input: &str) -> IResult<Value> {
 }
 
 fn int(input: &str) -> IResult<Value> {
-    map(terminated(parse_u64, not(tag("."))), Value::Int)(input)
+    map(terminated(parse_i64, not(tag("."))), Value::Int)(input)
 }
 
 fn float(input: &str) -> IResult<Value> {
@@ -56,7 +67,7 @@ fn string_double(input: &str) -> IResult<Value> {
             escaped(none_of(r#"""#), '\\', one_of(r#"""#)),
             one_of("\""),
         ),
-        Value::String,
+        |s| Value::String(Cow::Borrowed(s)),
     )(input)
 }
 
@@ -67,7 +78,7 @@ fn string_single(input: &str) -> IResult<Value> {
             escaped(none_of(r#"'"#), '\\', one_of(r#"'"#)),
             one_of("'"),
         ),
-        Value::String,
+        |s| Value::String(Cow::Borrowed(s)),
     )(input)
 }
 
@@ -81,16 +92,23 @@ fn comment(input: &str) -> IResult<&str> {
 
 /// Lax identifier parser. Allows technically banned identifiers like `2ident`, but we don't
 /// care
-fn identifier(input: &str) -> IResult<&str> {
-    take_while1::<_, &str, _>(|c| c.is_alphanumeric() || c == '_')(input)
+fn identifier(input: &str) -> IResult<Cow<str>> {
+    map(
+        take_while1::<_, &str, _>(|c| c.is_alphanumeric() || c == '_'),
+        Cow::Borrowed,
+    )(input)
 }
 
 /// Represents a Lua table. We don't support mixing named keys and implicit keys.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Table<'a> {
     Empty,
-    Named(HashMap<&'a str, Value<'a>>),
+    Named(HashMap<Cow<'a, str>, Value<'a>>),
     Array(Vec<Value<'a>>),
+    MixedTable {
+        array: Vec<Value<'a>>,
+        named: HashMap<Cow<'a, str>, Value<'a>>,
+    },
 }
 
 fn table_empty(input: &str) -> IResult<Table> {
@@ -111,7 +129,7 @@ where
     delimited(spacing, inner, spacing)
 }
 
-fn table_string_key(input: &str) -> IResult<&str> {
+fn table_string_key(input: &str) -> IResult<Cow<str>> {
     map(
         delimited(tag("["), alt((string_single, string_double)), tag("]")),
         |v| match v {
@@ -121,7 +139,7 @@ fn table_string_key(input: &str) -> IResult<&str> {
     )(input)
 }
 
-fn named_pair(input: &str) -> IResult<(&str, Value)> {
+fn named_pair(input: &str) -> IResult<(Cow<str>, Value)> {
     separated_pair(alt((table_string_key, identifier)), ws(tag("=")), value)(input)
 }
 
@@ -133,7 +151,10 @@ fn table_named(input: &str) -> IResult<Table> {
             ws(tag("}")),
         ),
         |entries| {
-            let map = entries.into_iter().collect::<HashMap<_, _>>();
+            let map = entries
+                .into_iter()
+                .map(|(k, v)| (k.to_owned(), v))
+                .collect::<HashMap<_, _>>();
             Table::Named(map)
         },
     )(input)
@@ -175,21 +196,21 @@ fn initial_assignment(input: &str) -> IResult<Value> {
 macro_rules! from_value {
           (ref $name:ident ($value:ident) $body:block) => {
               impl<'a> TryFrom<Value<'a>> for &'a $name {
-                type Error = SavedVariablesError<'a>;
+                type Error = SavedVariablesError;
 
                 fn try_from($value: Value<'a>) -> Result<Self, Self::Error> $body
               }
           };
           (owned $name:ident ($value:ident) $body:block) => {
               impl<'a> TryFrom<Value<'a>> for $name {
-                type Error = SavedVariablesError<'a>;
+                type Error = SavedVariablesError;
 
                 fn try_from($value: Value<'a>) -> Result<Self, Self::Error> $body
               }
           };
             ($name:ident ($value:ident) $body:block) => {
               impl<'a> TryFrom<Value<'a>> for $name<'a> {
-                type Error = SavedVariablesError<'a>;
+                type Error = SavedVariablesError;
 
                 fn try_from($value: Value<'a>) -> Result<Self, Self::Error> $body
               }
@@ -214,14 +235,14 @@ macro_rules! try_from_struct {
               from_value!($($kind)? $target (value) {
                 match value {
                   Value::Table(Table::Named(mut data)) => try_from_keys!($target(data) $keys),
-                  other => Err(SavedVariablesError::BadType { name: stringify!($target), expected: "Associative Table", actual: Box::new(other) }),
+                  other => Err(SavedVariablesError::BadType { name: stringify!($target), expected: "Associative Table", actual: format!("{:?}", other) }),
                 }});
               };
         }
 
 #[derive(Debug, PartialEq)]
 pub enum RecordingData<'a> {
-    Unparsed(&'a str),
+    Unparsed(Cow<'a, str>),
     Parsed(ParsedRecording<'a>),
 }
 
@@ -232,7 +253,7 @@ from_value!(RecordingData(value) {
     other => Err(SavedVariablesError::BadType {
       name: "RecordingData",
       expected: "String or Table",
-      actual: Box::new(other),
+      actual: format!("{:?}", other),
     })
   }
 });
@@ -240,14 +261,14 @@ from_value!(RecordingData(value) {
 #[derive(Debug, PartialEq)]
 #[allow(non_snake_case)]
 pub struct ParsedRecording<'a> {
-    scripts: HashMap<&'a str, TrackerData>,
+    scripts: HashMap<Cow<'a, str>, TrackerData>,
     onUpdateDelay: TrackerData,
 }
 
 from_value!(ParsedRecording(value) {
   match value {
     Value::Table(Table::Named(mut map)) => try_from_keys!(ParsedRecording(map) { scripts, onUpdateDelay }),
-    _ => Err(SavedVariablesError::BadType { name: "ParsedRecording", expected: "Named Table", actual: Box::new(value) })
+    _ => Err(SavedVariablesError::BadType { name: "ParsedRecording", expected: "Named Table", actual: format!("{:?}", value) })
   }
 });
 
@@ -261,7 +282,7 @@ pub enum Encounter<'a> {
     Raid {
         startTime: u64,
         endTime: u64,
-        encounterName: &'a str,
+        encounterName: Cow<'a, str>,
         encounterId: u64,
         success: bool,
         difficultyId: u64,
@@ -285,13 +306,18 @@ from_value!(Encounter(value) {
         None => {
           Err(SavedVariablesError::MissingKey { name: "Encounter", key: "kind" })
         },
-        Some(Value::String("manual")) => try_from_keys!(Manual(data) { startTime, endTime }),
-        Some(Value::String("mythicplus")) => try_from_keys!(Dungeon(data) { startTime, endTime, success, mapId, groupSize }),
-        Some(Value::String("raid")) => try_from_keys!(Raid(data) { startTime, endTime, encounterName, encounterId, success, difficultyId, groupSize }),
-        Some(value) => Err(SavedVariablesError::BadType { name: "EncounterType", expected: "manual, mythicplus, or raid", actual: Box::new(value) })
+        Some(Value::String(value)) => {
+          match &*value {
+            "manual" => try_from_keys!(Manual(data) { startTime, endTime }),
+            "mythicplus" => try_from_keys!(Dungeon(data) { startTime, endTime, success, mapId, groupSize }),
+            "raid" => try_from_keys!(Raid(data) { startTime, endTime, encounterName, encounterId, success, difficultyId, groupSize }),
+            _ => unreachable!(),
+          }
+        },
+        Some(value) => Err(SavedVariablesError::BadType { name: "EncounterType", expected: "manual, mythicplus, or raid", actual: format!("{:?}", value) })
       }
     },
-    other => Err(SavedVariablesError::BadType { name: "Encounter", expected: "Associative Table", actual: Box::new(other) }),
+    other => Err(SavedVariablesError::BadType { name: "Encounter", expected: "Associative Table", actual: format!("{:?}", other) }),
   }
 });
 
@@ -308,8 +334,8 @@ pub struct TrackerData {
 
 from_value!(owned u64(value) {
   match value {
-    Value::Int(v) => Ok(v),
-    _ => Err(SavedVariablesError::InvalidPrimitive { expected: "integer", actual: Box::new(value) }),
+    Value::Int(v) => v.try_into().map_err(SavedVariablesError::from),
+    _ => Err(SavedVariablesError::InvalidPrimitive { expected: "integer", actual: format!("{:?}", value) }),
   }
 });
 
@@ -318,26 +344,33 @@ from_value!(owned f64(value) {
     Value::Float(v) => Ok(v),
     // allow promoting ints to floats
     Value::Int(v) => Ok(v as f64),
-    _ => Err(SavedVariablesError::InvalidPrimitive { expected: "float", actual: Box::new(value) }),
+    _ => Err(SavedVariablesError::InvalidPrimitive { expected: "float", actual: format!("{:?}", value) }),
   }
 });
 
 from_value!(owned bool(value) {
   match value {
     Value::Bool(v) => Ok(v),
-    _ => Err(SavedVariablesError::InvalidPrimitive { expected: "bool", actual: Box::new(value) }),
+    _ => Err(SavedVariablesError::InvalidPrimitive { expected: "bool", actual:  format!("{:?}", value)}),
   }
 });
 
-from_value!(ref str(value) {
-  match value {
-    Value::String(s) => Ok(s),
-    _ => Err(SavedVariablesError::InvalidPrimitive { expected: "string", actual: Box::new(value) }),
-  }
-});
+impl<'a> TryFrom<Value<'a>> for Cow<'a, str> {
+    type Error = SavedVariablesError;
 
-impl<'a, V: TryFrom<Value<'a>, Error = SavedVariablesError<'a>>> TryFrom<Value<'a>> for Vec<V> {
-    type Error = SavedVariablesError<'a>;
+    fn try_from(value: Value<'a>) -> Result<Self, Self::Error> {
+        match value {
+            Value::String(s) => Ok(s),
+            _ => Err(SavedVariablesError::InvalidPrimitive {
+                expected: "string",
+                actual: format!("{:?}", value),
+            }),
+        }
+    }
+}
+
+impl<'a, V: TryFrom<Value<'a>, Error = SavedVariablesError>> TryFrom<Value<'a>> for Vec<V> {
+    type Error = SavedVariablesError;
 
     fn try_from(value: Value<'a>) -> Result<Self, Self::Error> {
         match value {
@@ -346,16 +379,16 @@ impl<'a, V: TryFrom<Value<'a>, Error = SavedVariablesError<'a>>> TryFrom<Value<'
             _ => Err(SavedVariablesError::BadType {
                 name: "Array",
                 expected: "Monotyped Table",
-                actual: Box::new(value),
+                actual: format!("{:?}", value),
             }),
         }
     }
 }
 
-impl<'a, V: TryFrom<Value<'a>, Error = SavedVariablesError<'a>>> TryFrom<Value<'a>>
-    for HashMap<&'a str, V>
+impl<'a, V: TryFrom<Value<'a>, Error = SavedVariablesError>> TryFrom<Value<'a>>
+    for HashMap<Cow<'a, str>, V>
 {
-    type Error = SavedVariablesError<'a>;
+    type Error = SavedVariablesError;
 
     fn try_from(value: Value<'a>) -> Result<Self, Self::Error> {
         match value {
@@ -370,7 +403,7 @@ impl<'a, V: TryFrom<Value<'a>, Error = SavedVariablesError<'a>>> TryFrom<Value<'
             _ => Err(SavedVariablesError::BadType {
                 name: "HashMap",
                 expected: "Monotyped Associative Table",
-                actual: Box::new(value),
+                actual: format!("{:?}", value),
             }),
         }
     }
@@ -380,7 +413,7 @@ impl<'a, V: TryFrom<Value<'a>, Error = SavedVariablesError<'a>>> TryFrom<Value<'
 macro_rules! try_optional_value {
     ($name:ty) => {
         impl<'a> TryFrom<Value<'a>> for Option<$name> {
-            type Error = SavedVariablesError<'a>;
+            type Error = SavedVariablesError;
 
             fn try_from(value: Value<'a>) -> Result<Self, Self::Error> {
                 match value {
@@ -412,19 +445,17 @@ pub struct Recording<'a> {
     data: RecordingData<'a>,
 }
 
-impl<'a> Recording<'a> {
-    pub fn data(&self) -> Result<&ParsedRecording, SavedVariablesError> {
-        match self.data {
-            RecordingData::Parsed(ref data) => Ok(data),
-            RecordingData::Unparsed(raw) => {
-                let _data = decompress(raw)?;
-                unimplemented!()
-            }
-        }
-    }
-}
+from_value!(Recording(value) {
+  match value {
+    Value::Table(Table::Named(mut map)) => {
+      let encounter = Encounter::try_from(map.remove("encounter").ok_or(SavedVariablesError::MissingKey { name: "Recording", key: "encounter" })?)?;
+      let data = RecordingData::try_from(map.remove("data").ok_or(SavedVariablesError::MissingKey { name: "Recording", key: "data" })?)?;
 
-try_from_struct!(Recording { encounter, data });
+      Ok(Recording { encounter, data })
+    },
+    other => Err(SavedVariablesError::BadType { name: "Recording", expected: "Associative Table", actual: format!("{:?}", other) })
+  }
+});
 
 #[derive(Debug, PartialEq)]
 pub struct SavedVariables<'a> {
@@ -434,36 +465,40 @@ pub struct SavedVariables<'a> {
 try_from_struct!(SavedVariables { recordings });
 
 #[derive(thiserror::Error, Debug)]
-pub enum SavedVariablesError<'a> {
-    #[error("Unable to parse {name}. Expected {expected}. Found {actual:?}")]
+pub enum SavedVariablesError {
+    #[error("Unable to parse {name}. Expected {expected}. Found {actual}")]
     BadType {
         name: &'static str,
         expected: &'static str,
-        actual: Box<Value<'a>>,
+        actual: String,
     },
     #[error("Unable to parse {name}. Key {key} missing.")]
     MissingKey {
         name: &'static str,
         key: &'static str,
     },
-    #[error("Unable to parse {expected}. Invalid primitive {actual:?}.")]
+    #[error("Unable to parse {expected}. Invalid primitive {actual}.")]
     InvalidPrimitive {
         expected: &'static str,
-        actual: Box<Value<'a>>,
+        actual: String,
     },
     #[error("Unable to parse SavedVariables file. {message}")]
     ParseError { message: String },
     #[error("Unable to decompress recording data: {0}")]
     DecompressionError(#[from] DecompressionError),
+    #[error("Unable to parse LibSerialize data: {0}")]
+    DeserializeError(deserialize::SerializeParseError),
+    #[error("Unable to cast number from signed to unsigned. {0}")]
+    SignCastError(#[from] TryFromIntError),
     #[error("Unable to read input data")]
     Unreadable,
+    #[error("Recording data has not been deserialized yet")]
+    NotDeserialized,
     #[error("An unrecoverable parse error occurred")]
     Unknown,
 }
 
-pub fn parse_saved_variables<'a>(
-    data: &'a str,
-) -> Result<SavedVariables<'a>, SavedVariablesError<'a>> {
+pub fn parse_saved_variables<'a>(data: &'a str) -> Result<SavedVariables<'a>, SavedVariablesError> {
     let (_, value) = initial_assignment(&data).map_err(|err| SavedVariablesError::ParseError {
         message: match err {
             nom::Err::Incomplete(_) => unreachable!(),
@@ -474,9 +509,50 @@ pub fn parse_saved_variables<'a>(
     SavedVariables::try_from(value)
 }
 
+pub fn parse_compressed_recording<'a>(
+    data: &'a str,
+) -> Result<ParsedRecording<'a>, SavedVariablesError> {
+    let data = decompress(data).map_err(SavedVariablesError::DecompressionError)?;
+    let data = deserialize(&data).map_err(SavedVariablesError::DeserializeError)?;
+    match data {
+        Value::Table(Table::Named(mut map)) => Ok(ParsedRecording {
+            onUpdateDelay: TrackerData::try_from(map.remove("onUpdateDelay").ok_or(
+                SavedVariablesError::MissingKey {
+                    name: "Recording",
+                    key: "onUpdateDelay",
+                },
+            )?)?,
+            scripts: {
+                let value = map
+                    .remove("scripts")
+                    .ok_or(SavedVariablesError::MissingKey {
+                        name: "Recording",
+                        key: "scripts",
+                    })?;
+
+                match value {
+                    Value::Table(Table::Named(map)) => map
+                        .into_iter()
+                        .map(|(k, v)| {
+                            Ok::<_, SavedVariablesError>((
+                                Cow::Owned(k.to_string()),
+                                TrackerData::try_from(v)?,
+                            ))
+                        })
+                        .collect::<Result<HashMap<_, _>, _>>()?,
+                    _ => unimplemented!(),
+                }
+            },
+        }),
+        _ => unimplemented!(),
+    }
+}
+
 #[cfg(test)]
 mod test {
     use nom::combinator::complete;
+
+    use crate::parser::parse_compressed_recording;
 
     use super::SavedVariables;
 
@@ -578,15 +654,14 @@ mod test {
 
         assert!(result.is_ok());
 
-        let result = result.unwrap();
+        let mut result = result.unwrap();
 
-        for recording in &result.recordings {
-            match recording.data() {
-                Err(err) => {
-                    println!("{}", err);
-                    assert!(false);
+        for recording in &mut result.recordings {
+            match &recording.data {
+                crate::parser::RecordingData::Unparsed(raw) => {
+                    parse_compressed_recording(&raw).expect("to succeed");
                 }
-                Ok(_) => {}
+                _ => {}
             }
         }
     }

@@ -1,12 +1,8 @@
 /// Rather than embed a whole lua parser (of which we need very little), use a basic nom parser for the saved variables table
 use std::{
-    borrow::{Borrow, Cow},
-    cell::{Ref, RefCell},
+    borrow::{Cow},
     collections::HashMap,
-    hash::Hash,
     num::TryFromIntError,
-    ops::Deref,
-    rc::Rc,
 };
 
 use nom::{

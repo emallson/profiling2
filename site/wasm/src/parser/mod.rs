@@ -143,10 +143,7 @@ fn table_named(input: &str) -> IResult<Table> {
             ws(tag("}")),
         ),
         |entries| {
-            let map = entries
-                .into_iter()
-                .map(|(k, v)| (k.to_owned(), v))
-                .collect::<HashMap<_, _>>();
+            let map = entries.into_iter().collect::<HashMap<_, _>>();
             Table::Named(map)
         },
     )(input)
@@ -490,8 +487,8 @@ pub enum SavedVariablesError {
     Unknown,
 }
 
-pub fn parse_saved_variables<'a>(data: &'a str) -> Result<SavedVariables<'a>, SavedVariablesError> {
-    let (_, value) = initial_assignment(&data).map_err(|err| SavedVariablesError::ParseError {
+pub fn parse_saved_variables(data: &str) -> Result<SavedVariables<'_>, SavedVariablesError> {
+    let (_, value) = initial_assignment(data).map_err(|err| SavedVariablesError::ParseError {
         message: match err {
             nom::Err::Incomplete(_) => unreachable!(),
             nom::Err::Error(inner) | nom::Err::Failure(inner) => convert_error(data, inner),
@@ -501,9 +498,7 @@ pub fn parse_saved_variables<'a>(data: &'a str) -> Result<SavedVariables<'a>, Sa
     SavedVariables::try_from(value)
 }
 
-pub fn parse_compressed_recording<'a>(
-    data: &'a str,
-) -> Result<ParsedRecording<'a>, SavedVariablesError> {
+pub fn parse_compressed_recording(data: &str) -> Result<ParsedRecording<'_>, SavedVariablesError> {
     let data = decompress(data).map_err(SavedVariablesError::DecompressionError)?;
     let data = deserialize(&data).map_err(SavedVariablesError::DeserializeError)?;
     println!("{:#?}", data);
@@ -666,7 +661,7 @@ mod test {
         for recording in &mut result.recordings {
             match &recording.data {
                 crate::parser::RecordingData::Unparsed(raw) => {
-                    parse_compressed_recording(&raw).expect("to succeed");
+                    parse_compressed_recording(raw).expect("to succeed");
                 }
                 _ => {}
             }

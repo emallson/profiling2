@@ -65,7 +65,7 @@ pub(super) fn decode_for_print(input: &str) -> Result<Vec<u8>, DecompressionErro
         let b = cache % 256;
         result.push(b as u8);
         cache = (cache - b) / 256;
-        cache_bitlen = cache_bitlen - 8;
+        cache_bitlen -= 8;
     }
 
     Ok(result)

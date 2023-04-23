@@ -1,21 +1,12 @@
-use std::{
-    any::type_name,
-    borrow::Cow,
-    cell::RefCell,
-    collections::{BTreeMap, HashMap},
-    fmt::{Debug, Display},
-    hash::Hash,
-    ops::{Deref, DerefMut, RangeFrom},
-    rc::Rc,
-};
+use std::{borrow::Cow, cell::RefCell, collections::HashMap, fmt::Debug, ops::RangeFrom, rc::Rc};
 
 use bitvec::{macros::internal::funty::Integral, prelude::*};
-use bitvec_nom::BSlice;
+
 use nom::{
     branch::alt,
-    bytes::complete::{tag, take},
+    bytes::complete::take,
     combinator::{complete, cut, flat_map, map, map_opt, map_res, value, verify},
-    error::{context, ErrorKind, FromExternalError, VerboseError, VerboseErrorKind},
+    error::{context, ErrorKind, FromExternalError, VerboseError},
     multi::{fold_many_m_n, many_m_n},
     number::{self, complete::be_f64},
     sequence::{pair, preceded, tuple},
@@ -75,7 +66,7 @@ struct ParserState<'a> {
 }
 
 impl<'a> ParserState<'a> {
-    fn new<'b>(input: Bytes<'b>) -> ParserState<'b> {
+    fn new(input: Bytes<'_>) -> ParserState<'_> {
         ParserState {
             input,
             state: Rc::new(State::new()),
@@ -299,9 +290,8 @@ fn store_table_ref<'a>(
 ) -> impl FnMut(ParserState<'a>) -> IResult<Value<'a>> {
     move |input| {
         let (output, result) = parser(input)?;
-        match &result {
-            Value::Table(table) => output.state.add_table_ref(table.clone()),
-            _ => {}
+        if let Value::Table(table) = &result {
+            output.state.add_table_ref(table.clone());
         }
         Ok((output, result))
     }
@@ -323,9 +313,8 @@ fn store_string_ref<'a>(
 ) -> impl FnMut(ParserState<'a>) -> IResult<Value<'a>> {
     move |input| {
         let (output, result) = parser(input)?;
-        match &result {
-            Value::String(str) => output.state.add_str_ref(str.clone()),
-            _ => {}
+        if let Value::String(result) = &result {
+            output.state.add_str_ref(result.clone());
         }
         Ok((output, result))
     }
@@ -450,7 +439,7 @@ fn float_str(count: u8) -> impl FnMut(ParserState) -> IResult<f64> {
             core::str::from_utf8(bytes.input)
                 .map_err(|_err| DeserializationError::Utf8Error)?
                 .parse::<f64>()
-                .map_err(|err| DeserializationError::StrFloatError(err))
+                .map_err(DeserializationError::StrFloatError)
         })(input)
     }
 }
@@ -564,8 +553,8 @@ pub fn deserialize<'a: 'b, 'b>(input: &'a [u8]) -> Result<Value<'b>, SerializePa
 #[cfg(test)]
 mod test {
     use map_macro::hash_map;
-    use pretty_assertions::{assert_eq, assert_ne};
-    use std::{borrow::Cow, collections::HashMap};
+    use pretty_assertions::assert_eq;
+    use std::borrow::Cow;
 
     use bitvec::prelude::*;
 

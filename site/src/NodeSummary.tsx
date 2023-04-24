@@ -10,7 +10,7 @@ import {
   leaves,
 } from "./frame_tree";
 import { encounterName, useSelectedRecording } from "./EncounterSelector";
-import { createMemo, createSignal, For, Show } from "solid-js";
+import { createMemo, createSignal, ErrorBoundary, For, Show } from "solid-js";
 import { TrackerData, fromScriptEntry } from "./saved_variables";
 import { style } from "@macaron-css/core";
 import Chart from "./Chart";
@@ -277,6 +277,19 @@ function scaledUpdateDelay(data: TrackerData): TrackerData {
   };
 }
 
+function DisplayError(props: { err: unknown }) {
+  return (
+    <Show
+      when={props.err instanceof Error}
+      fallback={<div>{(props.err as object).toString()}</div>}
+    >
+      <div>An error has occurred.</div>
+      <div>{(props.err as Error).toString()}</div>
+      <pre>{(props.err as Error).stack}</pre>
+    </Show>
+  );
+}
+
 export function RootSummary() {
   const recording = useSelectedRecording();
   const overall = createMemo<VirtualRootNode | undefined>(() => {
@@ -296,8 +309,10 @@ export function RootSummary() {
   });
 
   return (
-    <RootContainer>
-      <Show when={overall()}>{(overall) => <NodeSummary node={overall()} rootMode />}</Show>
-    </RootContainer>
+    <ErrorBoundary fallback={(err) => <DisplayError err={err} />}>
+      <RootContainer>
+        <Show when={overall()}>{(overall) => <NodeSummary node={overall()} rootMode />}</Show>
+      </RootContainer>
+    </ErrorBoundary>
   );
 }

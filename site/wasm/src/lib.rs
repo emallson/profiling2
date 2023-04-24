@@ -1,18 +1,19 @@
-use std::{borrow::Cow, cell::RefCell, collections::HashMap, rc::Rc, sync::mpsc::channel};
+use std::{cell::RefCell, rc::Rc};
 
 use ouroboros::self_referencing;
 use parser::{
-    Encounter, ParsedRecording, Recording, SavedVariables, SavedVariablesError, TrackerData,
+    ParsedRecording, Recording, SavedVariablesError,
 };
-use serde::Serialize;
+
 use wasm_bindgen::{
-    prelude::{wasm_bindgen, Closure},
+    prelude::{wasm_bindgen},
     JsValue,
 };
 
 use crate::parser::RecordingData;
 
 mod parser;
+mod sampler;
 
 #[self_referencing]
 struct SavedVariablesRefInner {
@@ -61,8 +62,8 @@ impl SavedVariablesRef {
 }
 
 impl RecordingRef {
-    /// This runs the data parsing without hitting `serde_wasm_bindgen`.
-    pub fn parse_data<'a>(&'a self) -> Result<ParsedRecording<'a>, String> {
+    /// This runs the data parsing without hitting `serde_wasm_bindgen`. used for testing
+    pub fn test_parse_data(&self) -> Result<ParsedRecording<'_>, String> {
         let data = self.borrow_data();
 
         match data.data {

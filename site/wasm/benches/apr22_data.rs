@@ -23,7 +23,7 @@ fn load_compressed(c: &mut Criterion) {
                     .unwrap()
             },
             |value| {
-                black_box(value.parse_data().unwrap());
+                black_box(value.test_parse_data().unwrap());
             },
             criterion::BatchSize::SmallInput,
         )

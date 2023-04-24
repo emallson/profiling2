@@ -99,6 +99,7 @@ pub enum Table<'a> {
     Empty,
     Named(HashMap<Cow<'a, str>, Value<'a>>),
     Array(Vec<Value<'a>>),
+    FloatArray(Vec<f64>),
     MixedTable {
         array: Vec<Value<'a>>,
         named: HashMap<Cow<'a, str>, Value<'a>>,
@@ -317,12 +318,14 @@ from_value!(Encounter(value) {
 #[allow(non_snake_case)]
 #[wasm_bindgen]
 pub struct TrackerData {
-    stats: Stats,
-    calls: u64,
-    commits: u64,
-    officialTime: Option<f64>,
-    total_time: f64,
-    top5: Vec<f64>,
+    #[wasm_bindgen(getter_with_clone)]
+    pub stats: Stats,
+    pub calls: u64,
+    pub commits: u64,
+    pub officialTime: Option<f64>,
+    pub total_time: f64,
+    #[wasm_bindgen(getter_with_clone)]
+    pub top5: Vec<f64>,
 }
 
 from_value!(owned u64(value) {
@@ -362,12 +365,29 @@ impl<'a> TryFrom<Value<'a>> for Cow<'a, str> {
     }
 }
 
-impl<'a, V: TryFrom<Value<'a>, Error = SavedVariablesError>> TryFrom<Value<'a>> for Vec<V> {
+impl<'a> TryFrom<Value<'a>> for Vec<Recording<'a>> {
     type Error = SavedVariablesError;
 
     fn try_from(value: Value<'a>) -> Result<Self, Self::Error> {
         match value {
-            Value::Table(Table::Array(vec)) => vec.into_iter().map(V::try_from).collect(),
+            Value::Table(Table::Array(vec)) => vec.into_iter().map(Value::try_into).collect(),
+            Value::Table(Table::Empty) => Ok(vec![]),
+            _ => Err(SavedVariablesError::BadType {
+                name: "Array",
+                expected: "Monotyped Table",
+                actual: format!("{:?}", value),
+            }),
+        }
+    }
+}
+
+impl<'a> TryFrom<Value<'a>> for Vec<f64> {
+    type Error = SavedVariablesError;
+
+    fn try_from(value: Value<'a>) -> Result<Self, Self::Error> {
+        match value {
+            Value::Table(Table::Array(vec)) => vec.into_iter().map(Value::try_into).collect(),
+            Value::Table(Table::FloatArray(vec)) => Ok(vec),
             Value::Table(Table::Empty) => Ok(vec![]),
             _ => Err(SavedVariablesError::BadType {
                 name: "Array",
@@ -425,10 +445,11 @@ try_from_struct!((owned) TrackerData { stats, calls, commits, total_time, top5; 
 #[derive(Debug, PartialEq, Clone, Serialize)]
 #[wasm_bindgen]
 pub struct Stats {
-    mean: f64,
-    variance: Option<f64>,
-    skew: Option<f64>,
-    samples: Vec<f64>,
+    pub mean: f64,
+    pub variance: Option<f64>,
+    pub skew: Option<f64>,
+    #[wasm_bindgen(getter_with_clone)]
+    pub samples: Vec<f64>,
 }
 
 try_from_struct!((owned) Stats { mean, samples; variance, skew });

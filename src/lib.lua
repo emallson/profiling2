@@ -31,12 +31,13 @@ end
 function profiling2.buildFrameKey(addonName, name, origParent)
   local parent = origParent
 
-  local key = '@' .. addonName .. '/' .. name
+  local key = name
   while parent ~= nil do
     local subKey = frameName(parent)
-    key = key .. '/' .. subKey
+    key = subKey .. '/' .. key
     parent = parent:GetParent()
   end
+  key = '@' .. addonName .. '/' .. key
 
   return key
 end

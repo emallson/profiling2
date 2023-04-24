@@ -10,7 +10,7 @@ use nom::{
     multi::{fold_many_m_n, many_m_n},
     number::{self, complete::be_f64},
     sequence::{pair, preceded, tuple},
-    InputIter, InputLength, InputTake, Offset, Slice,
+    InputIter, InputLength, InputTake, Offset, Parser, Slice,
 };
 use num_derive::FromPrimitive;
 use num_traits::cast::FromPrimitive;
@@ -233,6 +233,23 @@ fn array(entry_count: u32) -> impl FnMut(ParserState) -> IResult<Vec<Value>> {
     move |input| many_m_n(entry_count as usize, entry_count as usize, any_object)(input)
 }
 
+fn float_array(entry_count: u32) -> impl FnMut(ParserState) -> IResult<Value> {
+    move |input| {
+        fold_many_m_n(
+            entry_count as usize,
+            entry_count as usize,
+            deserialize_float,
+            || Vec::with_capacity(entry_count as usize),
+            |mut vec, value| {
+                vec.push(value);
+                vec
+            },
+        )
+        .map(|v| Value::Table(Table::FloatArray(v)))
+        .parse(input)
+    }
+}
+
 /// Read `count` keys from a table into a hashmap.
 fn table(entry_count: u32) -> impl FnMut(ParserState) -> IResult<HashMap<Cow<str>, Value>> {
     move |input| {
@@ -244,7 +261,7 @@ fn table(entry_count: u32) -> impl FnMut(ParserState) -> IResult<HashMap<Cow<str
                     "found non-string key in non-array table",
                     map_res(any_object, |v| match v {
                         Value::String(s) => Ok(s),
-                        actual => Err(()),
+                        _actual => Err(()),
                     }),
                 ),
                 any_object,
@@ -331,9 +348,10 @@ fn deserialize_small_object(input: ParserState) -> IResult<Value> {
 
     match type_tag {
         SmallObjectType::String => store_string_ref(cut(map(string(count), Value::String)))(rest),
-        SmallObjectType::Array => store_table_ref(cut(map(array(count), |array| {
-            Value::Table(Table::Array(array))
-        })))(rest),
+        SmallObjectType::Array => store_table_ref(cut(alt((
+            float_array(count),
+            map(array(count), |array| Value::Table(Table::Array(array))),
+        ))))(rest),
         SmallObjectType::Table => store_table_ref(cut(map(table(count), |map| {
             Value::Table(Table::Named(map))
         })))(rest),
@@ -447,6 +465,20 @@ fn trace<'a, O: Debug>(
     }
 }
 
+// We deal with a lot of float arrays. This fast path helps improve parsing performance of them.
+fn deserialize_float(input: ParserState) -> IResult<f64> {
+    let (rest, header) = large_object_header(input.clone())?;
+
+    match header {
+        LargeObjectHeader::Float => float(rest),
+        _ => Err(nom::Err::Error(VerboseError::from_external_error(
+            input,
+            ErrorKind::Alt,
+            (),
+        ))),
+    }
+}
+
 fn deserialize_large_object(input: ParserState) -> IResult<Value> {
     let (rest, header) = large_object_header(input)?;
 
@@ -467,11 +499,12 @@ fn deserialize_large_object(input: ParserState) -> IResult<Value> {
                 Value::Table(Table::Named(map))
             })))(rest)
         }
-        val @ (Array8 | Array16 | Array24) => {
-            store_table_ref(cut(map(flat_map(int(val.bytes()), array), |arr| {
+        val @ (Array8 | Array16 | Array24) => store_table_ref(cut(alt((
+            flat_map(int(val.bytes()), float_array),
+            map(flat_map(int(val.bytes()), array), |arr| {
                 Value::Table(Table::Array(arr))
-            })))(rest)
-        }
+            }),
+        ))))(rest),
         val @ (Mixed8 | Mixed16 | Mixed24) => {
             store_table_ref(cut(flat_map(int(val.bytes()), mixed_table)))(rest)
         }

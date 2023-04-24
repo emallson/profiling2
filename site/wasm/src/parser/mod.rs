@@ -129,7 +129,7 @@ fn table_string_key(input: &str) -> IResult<Cow<str>> {
         delimited(tag("["), alt((string_single, string_double)), tag("]")),
         |v| match v {
             Value::String(s) => s,
-            _ => unreachable!(),
+            _ => unreachable!("non-string table key found from string parser?!"),
         },
     )(input)
 }
@@ -304,7 +304,7 @@ from_value!(Encounter(value) {
             "manual" => try_from_keys!(Manual(data) { startTime, endTime }),
             "mythicplus" => try_from_keys!(Dungeon(data) { startTime, endTime, success, mapId, groupSize }),
             "raid" => try_from_keys!(Raid(data) { startTime, endTime, encounterName, encounterId, success, difficultyId, groupSize }),
-            _ => unreachable!(),
+            value => Err(SavedVariablesError::BadType { name: "Encounter", expected: "manual, mythicplus, or raid", actual: value.to_string() })
           }
         },
         Some(value) => Err(SavedVariablesError::BadType { name: "EncounterType", expected: "manual, mythicplus, or raid", actual: format!("{:?}", value) })
@@ -553,11 +553,24 @@ pub fn parse_compressed_recording(data: &str) -> Result<ParsedRecording<'_>, Sav
                             ))
                         })
                         .collect::<Result<HashMap<_, _>, _>>()?,
-                    _ => unimplemented!(),
+                    Value::Table(Table::Empty) => HashMap::new(),
+                    value => {
+                        return Err(SavedVariablesError::BadType {
+                            name: "ScriptEntry",
+                            expected: "Associative Table",
+                            actual: format!("{:?}", value),
+                        })
+                    }
                 }
             },
         }),
-        _ => unimplemented!(),
+        value => {
+            return Err(SavedVariablesError::BadType {
+                name: "RecordingData",
+                expected: "Associative Table",
+                actual: format!("{:?}", value),
+            })
+        }
     }
 }
 
@@ -682,6 +695,26 @@ mod test {
             }
             _ => assert!(false),
         };
+
+        for recording in &mut result.recordings {
+            match &recording.data {
+                crate::parser::RecordingData::Unparsed(raw) => {
+                    parse_compressed_recording(raw).expect("to succeed");
+                }
+                _ => {}
+            }
+        }
+    }
+
+    #[test]
+    fn parse_apr24_data() {
+        let result =
+            super::parse_saved_variables(include_str!("../../../test-data/test_apr24_2023.lua"));
+
+        assert!(result.is_ok());
+
+        let mut result = result.unwrap();
+        assert_eq!(result.recordings.len(), 6);
 
         for recording in &mut result.recordings {
             match &recording.data {

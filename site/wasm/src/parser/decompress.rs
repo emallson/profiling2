@@ -38,8 +38,9 @@ pub enum DecompressionError {
 pub(super) fn decode_for_print(input: &str) -> Result<Vec<u8>, DecompressionError> {
     let mut result = Vec::new();
     let bytes = input.as_bytes();
-    let (major, minor) = bytes.split_at(bytes.len() - 4);
-    assert!(major.len() % 4 == 0);
+    let major_len = (bytes.len() / 4) * 4;
+    let (major, minor) = bytes.split_at(major_len);
+    assert_eq!(major.len() % 4, 0);
     for x in major.chunks(4) {
         let mut cache: usize = decode_byte(x[0])? as usize
             + decode_byte(x[1])? as usize * 64

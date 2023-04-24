@@ -66,8 +66,8 @@ const keypath = z.string().transform((val) => {
   return {
     addonName: addonName!,
     scriptName,
-    frameName: path.at(0)!,
-    framePath: path.slice(1, -1).reverse(),
+    frameName: path.at(-1)!,
+    framePath: path.slice(1, -1),
   };
 });
 

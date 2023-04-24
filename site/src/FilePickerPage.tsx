@@ -27,7 +27,7 @@ export default function FilePickerPage() {
           accept=".lua"
         />
         {store?.().success === false && (
-          <div>{store?.().error?.message ?? "Unable to read data"}</div>
+          <div>{store?.().error?.toString() ?? "Unable to read data"}</div>
         )}
       </div>
     </CenteringContainer>

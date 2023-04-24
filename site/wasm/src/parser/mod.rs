@@ -11,6 +11,8 @@ use nom::{
     number::complete::double,
     sequence::{delimited, separated_pair, terminated},
 };
+use serde::Serialize;
+use wasm_bindgen::prelude::wasm_bindgen;
 
 use self::{
     decompress::{decompress, DecompressionError},
@@ -247,11 +249,11 @@ from_value!(RecordingData(value) {
   }
 });
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone, Serialize)]
 #[allow(non_snake_case)]
 pub struct ParsedRecording<'a> {
-    scripts: HashMap<Cow<'a, str>, TrackerData>,
-    onUpdateDelay: TrackerData,
+    pub scripts: HashMap<Cow<'a, str>, TrackerData>,
+    pub onUpdateDelay: TrackerData,
 }
 
 from_value!(ParsedRecording(value) {
@@ -261,8 +263,9 @@ from_value!(ParsedRecording(value) {
   }
 });
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Serialize)]
 #[allow(non_snake_case)]
+#[serde(tag = "kind", rename_all = "lowercase")]
 pub enum Encounter<'a> {
     Manual {
         startTime: u64,
@@ -310,8 +313,9 @@ from_value!(Encounter(value) {
   }
 });
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone, Serialize)]
 #[allow(non_snake_case)]
+#[wasm_bindgen]
 pub struct TrackerData {
     stats: Stats,
     calls: u64,
@@ -418,7 +422,8 @@ try_optional_value!(f64);
 
 try_from_struct!((owned) TrackerData { stats, calls, commits, total_time, top5; officialTime });
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone, Serialize)]
+#[wasm_bindgen]
 pub struct Stats {
     mean: f64,
     variance: Option<f64>,
@@ -430,8 +435,8 @@ try_from_struct!((owned) Stats { mean, samples; variance, skew });
 
 #[derive(Debug, PartialEq)]
 pub struct Recording<'a> {
-    encounter: Encounter<'a>,
-    data: RecordingData<'a>,
+    pub(crate) encounter: Encounter<'a>,
+    pub(crate) data: RecordingData<'a>,
 }
 
 from_value!(Recording(value) {
@@ -448,7 +453,7 @@ from_value!(Recording(value) {
 
 #[derive(Debug, PartialEq)]
 pub struct SavedVariables<'a> {
-    recordings: Vec<Recording<'a>>,
+    pub(crate) recordings: Vec<Recording<'a>>,
 }
 
 try_from_struct!(SavedVariables { recordings });

@@ -5,6 +5,8 @@
     "target": "esnext",
     "moduleResolution": "node",
     "strict": true,
+    "skipLibCheck": true,
     "types": ["vitest/globals"]
-  }
+  },
+  "exclude": ["node_modules/"]
 }

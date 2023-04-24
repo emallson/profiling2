@@ -1,6 +1,5 @@
 import {
   Accessor,
-  For,
   JSX,
   ParentProps,
   Show,
@@ -9,10 +8,12 @@ import {
   createSignal,
   useContext,
 } from "solid-js";
-import { Encounter, Recording, SavedVariables } from "./saved_variables";
+import { Encounter } from "./saved_variables";
 import { useSavedVariables } from "./SavedVariablesContext";
 import { styled } from "@macaron-css/solid";
 import { style } from "@macaron-css/core";
+import { Range } from "@solid-primitives/range";
+import { RecordingRef, SavedVariablesRef } from "../wasm/pkg/profiling2_wasm";
 
 export function encounterName(encounter: Encounter): string {
   switch (encounter.kind) {
@@ -66,25 +67,29 @@ const ListContainer = styled("div", {
 });
 
 const EncounterList = (props: {
-  data?: SavedVariables;
-  onClick: (recording: Recording) => void;
+  data?: SavedVariablesRef;
+  onClick: (recording: RecordingRef) => void;
 }) => {
   return (
     <ListContainer>
-      <For each={props.data?.recordings}>
-        {(recording) => (
-          <EncounterEntry
-            encounter={recording.encounter}
-            onClick={() => props.onClick(recording)}
-          />
-        )}
-      </For>
+      <Range to={props.data?.length() ?? 0}>
+        {(index) => {
+          // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+          const recording = props.data!.get(index)!;
+          return (
+            <EncounterEntry
+              encounter={recording.encounter}
+              onClick={() => props.onClick(recording)}
+            />
+          );
+        }}
+      </Range>
     </ListContainer>
   );
 };
 
 const Context = createContext<{
-  selectedRecording?: Accessor<Recording | undefined>;
+  selectedRecording?: Accessor<RecordingRef | undefined>;
 }>({});
 
 export const useSelectedRecording = () => {
@@ -106,9 +111,9 @@ const PageLayout = styled("div", {
 
 export default function EncounterSelector(props: ParentProps): JSX.Element {
   const { store } = useSavedVariables();
-  const [recording, setRecording] = createSignal<Recording | undefined>();
+  const [recording, setRecording] = createSignal<RecordingRef | undefined>();
 
-  const setSelection = (recording: Recording) => {
+  const setSelection = (recording: RecordingRef) => {
     setRecording(recording);
   };
 

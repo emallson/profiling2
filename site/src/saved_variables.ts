@@ -1,5 +1,6 @@
 import { SafeParseReturnType, z } from "zod";
 import * as lua from "lua-json";
+import * as parser from "../wasm/pkg/profiling2_wasm";
 
 const strToJson = (data: string) => lua.parse(data.replace("Profiling2_Storage =", "return"));
 
@@ -100,6 +101,26 @@ export type ScriptEntry = z.infer<typeof scriptEntries>[number];
 export type TrackerData = z.infer<typeof trackerData>;
 export type SavedVariables = z.infer<typeof savedVariables>;
 
-export function parse(data: string): SafeParseReturnType<string, SavedVariables> {
-  return luaString.pipe(savedVariables).safeParse(data);
+export function fromScriptEntry([key, data]: [string, TrackerData]): ScriptEntry {
+  const subject = keypath.parse(key);
+  return {
+    ...data,
+    subject,
+  };
+}
+
+export type ParseResult =
+  | {
+      success: true;
+      data: parser.SavedVariablesRef;
+    }
+  | { success: false; error: unknown };
+
+export function parse(data: string): ParseResult {
+  try {
+    const result = parser.parse_saved_variables(data);
+    return { success: true, data: result };
+  } catch (error) {
+    return { success: false, error };
+  }
 }

@@ -1,11 +1,6 @@
-import {
-  Accessor,
-  ParentProps,
-  createContext,
-  createSignal,
-  useContext,
-} from "solid-js";
+import { Accessor, ParentProps, createContext, createSignal, useContext } from "solid-js";
 import * as savedVariables from "./saved_variables";
+import { SavedVariablesRef } from "../wasm/pkg/profiling2_wasm";
 
 const SavedVariablesContext = createContext<{
   store?: Accessor<Store>;
@@ -18,8 +13,8 @@ const SavedVariablesContext = createContext<{
 
 type Store = {
   success?: boolean;
-  error?: Error;
-  data?: savedVariables.SavedVariables;
+  error?: unknown;
+  data?: SavedVariablesRef;
 };
 
 export function SavedVariablesProvider(props: ParentProps) {

@@ -11,7 +11,7 @@ import {
 } from "./frame_tree";
 import { encounterName, useSelectedRecording } from "./EncounterSelector";
 import { createMemo, createSignal, For, Show } from "solid-js";
-import { TrackerData } from "./saved_variables";
+import { TrackerData, fromScriptEntry } from "./saved_variables";
 import { style } from "@macaron-css/core";
 import Chart from "./Chart";
 
@@ -285,7 +285,8 @@ export function RootSummary() {
       return undefined;
     }
 
-    const roots = buildScriptTree(rec.data.scripts);
+    const scripts = Array.from((rec.data.scripts as Map<string, TrackerData>).entries());
+    const roots = buildScriptTree(scripts.map(fromScriptEntry));
 
     return {
       key: encounterName(rec.encounter),

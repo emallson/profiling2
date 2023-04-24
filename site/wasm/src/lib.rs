@@ -1,4 +1,4 @@
-use std::{borrow::Cow, collections::HashMap, rc::Rc, sync::mpsc::channel};
+use std::{borrow::Cow, cell::RefCell, collections::HashMap, rc::Rc, sync::mpsc::channel};
 
 use ouroboros::self_referencing;
 use parser::{
@@ -34,6 +34,7 @@ pub struct RecordingRef {
     #[borrows(source)]
     #[covariant]
     data: Rc<Recording<'this>>,
+    cached_data: RefCell<Option<JsValue>>,
 }
 
 #[wasm_bindgen]
@@ -45,6 +46,7 @@ impl SavedVariablesRef {
     pub fn get(&self, index: usize) -> Option<RecordingRef> {
         let builder = RecordingRefTryBuilder {
             source: self.inner.clone(),
+            cached_data: RefCell::new(None),
             data_builder: |source| {
                 source
                     .borrow_data()
@@ -55,6 +57,21 @@ impl SavedVariablesRef {
         };
 
         builder.try_build().ok()
+    }
+}
+
+impl RecordingRef {
+    /// This runs the data parsing without hitting `serde_wasm_bindgen`.
+    pub fn parse_data<'a>(&'a self) -> Result<ParsedRecording<'a>, String> {
+        let data = self.borrow_data();
+
+        match data.data {
+            RecordingData::Parsed(_) => Err("found parsed data".to_string()),
+            RecordingData::Unparsed(ref raw) => {
+                let data = parser::parse_compressed_recording(raw).map_err(|e| e.to_string())?;
+                Ok(data)
+            }
+        }
     }
 }
 
@@ -75,8 +92,15 @@ impl RecordingRef {
                 serde_wasm_bindgen::to_value(data).map_err(|e| e.to_string())
             }
             RecordingData::Unparsed(ref raw) => {
-                let data = parser::parse_compressed_recording(raw).map_err(|e| e.to_string())?;
-                serde_wasm_bindgen::to_value(&data).map_err(|e| e.to_string())
+                if self.borrow_cached_data().borrow().is_some() {
+                    Ok(self.borrow_cached_data().borrow().clone().unwrap())
+                } else {
+                    let data =
+                        parser::parse_compressed_recording(raw).map_err(|e| e.to_string())?;
+                    let value = serde_wasm_bindgen::to_value(&data).map_err(|e| e.to_string())?;
+                    *(self.borrow_cached_data().borrow_mut()) = Some(value.clone());
+                    Ok(value)
+                }
             }
         }
     }

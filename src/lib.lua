@@ -419,11 +419,6 @@ local function insertRecording(recording)
       table.remove(Profiling2_Storage.recordings, 1)
     end
 
-    -- record both for now to compare compressed size offline.
-    -- initial results indicate that serialization + compression is MUCH better than the naive
-    -- output
-    table.insert(Profiling2_Storage.recordings, recording)
-
     -- we only serialize and compress the data table. this allows us to skip decompression when
     -- handling the data in the browser, using the encounter table as metadata to determine what the
     -- user wants to load

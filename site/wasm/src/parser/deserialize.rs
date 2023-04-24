@@ -179,8 +179,6 @@ fn deserialize_medint(input: ParserState) -> IResult<Value> {
             result[4..12] |= high;
             result[0..4] |= &low[4..8];
 
-            // println!("{} {} {}", result, &*high, &*low);
-
             let sign = if low[3] { -1 } else { 1 };
 
             Value::Int((result.load::<u16>() as i16 * (sign as i16)).into())
@@ -246,10 +244,7 @@ fn table(entry_count: u32) -> impl FnMut(ParserState) -> IResult<HashMap<Cow<str
                     "found non-string key in non-array table",
                     map_res(any_object, |v| match v {
                         Value::String(s) => Ok(s),
-                        actual => {
-                            println!("actual {:?}", actual);
-                            Err(())
-                        }
+                        actual => Err(()),
                     }),
                 ),
                 any_object,
@@ -333,7 +328,6 @@ fn string_ref(key: usize) -> impl FnMut(ParserState) -> IResult<Value> {
 
 fn deserialize_small_object(input: ParserState) -> IResult<Value> {
     let (rest, SmallObjectHeader { count, type_tag }) = small_object_header(input)?;
-    println!("small {:?} ({})", type_tag, count);
 
     match type_tag {
         SmallObjectType::String => store_string_ref(cut(map(string(count), Value::String)))(rest),
@@ -449,15 +443,12 @@ fn trace<'a, O: Debug>(
 ) -> impl FnMut(ParserState<'a>) -> IResult<'a, O> {
     move |input| {
         let (rest, res) = inner(input)?;
-        println!("{:?}", res);
         Ok((rest, res))
     }
 }
 
 fn deserialize_large_object(input: ParserState) -> IResult<Value> {
     let (rest, header) = large_object_header(input)?;
-
-    println!("large {:?}", header);
 
     use LargeObjectHeader::*;
     match header {

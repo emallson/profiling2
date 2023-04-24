@@ -24,7 +24,10 @@ wasm-bindgen = "0.2.84"
 web-sys = {version = "0.3.61", features = []}
 
 [profile.release]
-opt-level = "s"
+debug = true
+
+[package.metadata.wasm-pack.profile.release]
+wasm-opt = ["-O4", "-g"]
 
 [dev-dependencies]
 map-macro = "0.2.6"

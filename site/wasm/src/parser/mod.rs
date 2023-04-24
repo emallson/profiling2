@@ -506,7 +506,6 @@ pub fn parse_saved_variables(data: &str) -> Result<SavedVariables<'_>, SavedVari
 pub fn parse_compressed_recording(data: &str) -> Result<ParsedRecording<'_>, SavedVariablesError> {
     let data = decompress(data).map_err(SavedVariablesError::DecompressionError)?;
     let data = deserialize(&data).map_err(SavedVariablesError::DeserializeError)?;
-    println!("{:#?}", data);
     match data {
         Value::Table(Table::Named(mut map)) => Ok(ParsedRecording {
             onUpdateDelay: TrackerData::try_from(map.remove("onUpdateDelay").ok_or(

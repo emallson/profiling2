@@ -149,8 +149,8 @@ export function ChildSummary(props: {
           },
         }),
         Plot.dotX(outliers, {
-          fill: "hsl(200, 70%, 70%)",
-          stroke: "hsl(200, 70%, 30%)",
+          fill: "hsl(0, 50%, 80%)",
+          stroke: "hsl(0, 50%, 30%)",
           strokeOpacity: 1,
           fillOpacity: 1,
           strokeWidth: 1,

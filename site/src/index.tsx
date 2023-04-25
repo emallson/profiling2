@@ -1,11 +1,12 @@
 import { render } from "solid-js/web";
 
-import { Show } from "solid-js";
+import { ErrorBoundary, Show } from "solid-js";
 import { SavedVariablesProvider, useSavedVariables } from "./SavedVariablesContext";
 import FilePickerPage from "./FilePickerPage";
 import EncounterSelector from "./EncounterSelector";
 import EncounterDetails from "./EncounterDetails";
 import { RootSummary } from "./NodeSummary";
+import DisplayError from "./DisplayError";
 
 const LoadingBlocker = () => {
   const { store } = useSavedVariables();
@@ -22,9 +23,11 @@ const LoadingBlocker = () => {
 
 const App = () => {
   return (
-    <SavedVariablesProvider>
-      <LoadingBlocker />
-    </SavedVariablesProvider>
+    <ErrorBoundary fallback={(err) => <DisplayError err={err} />}>
+      <SavedVariablesProvider>
+        <LoadingBlocker />
+      </SavedVariablesProvider>
+    </ErrorBoundary>
   );
 };
 

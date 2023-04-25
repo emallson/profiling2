@@ -14,6 +14,7 @@ import { createMemo, createSignal, ErrorBoundary, For, Show } from "solid-js";
 import { TrackerData, fromScriptEntry } from "./saved_variables";
 import { style } from "@macaron-css/core";
 import Chart from "./Chart";
+import DisplayError from "./DisplayError";
 
 const Title = styled("span", {
   base: {
@@ -102,33 +103,60 @@ const dangerZoneMark = (max: number) =>
     }
   );
 
+const BIN_COUNT = 33;
+
 export function ChildSummary(props: {
   child: TreeNode;
   onClick: () => void;
   selected?: boolean;
-  domainEnd?: number;
+  domainEnd: number;
 }) {
   const plot = createMemo<Plot.PlotOptions>(() => {
-    const samples = joined_samples(props.child);
+    const samples = joined_samples(props.child) ?? [];
     const outliers = topN(props.child);
+
+    const width = props.domainEnd;
+    const binWidth = width / BIN_COUNT;
 
     const result: Plot.PlotOptions = {
       x: {
         zero: true,
         axis: null,
-        domain: [0, props.domainEnd ?? INTERESTING_DURATION],
+        domain: [0, width],
       },
       marginLeft: 10,
       marginRight: 10,
+      opacity: {
+        domain: [0, 1 / 0.75],
+      },
       marks: [
-        dangerZoneMark(props.domainEnd ?? INTERESTING_DURATION),
-        Plot.boxX(samples, { r: 0 }),
-        Plot.dotX(outliers, {
+        dangerZoneMark(width),
+        Plot.rect(samples, {
+          ...Plot.binX(
+            { fillOpacity: "proportion" },
+            {
+              x: { value: (d) => d, interval: binWidth },
+            }
+          ),
+          strokeOpacity: 0.25,
           fill: "black",
           stroke: "black",
+          title(d) {
+            const left = binWidth * Math.floor(d[0] / binWidth);
+            return `${left.toFixed(1)} - ${(left + binWidth).toFixed(1)}ms ―  ${
+              d.length
+            } samples (${((100 * d.length) / samples.length).toFixed(1)}%)`;
+          },
+        }),
+        Plot.dotX(outliers, {
+          fill: "hsl(200, 70%, 70%)",
+          stroke: "hsl(200, 70%, 30%)",
           strokeOpacity: 1,
-          fillOpacity: 0.1,
+          fillOpacity: 1,
           strokeWidth: 1,
+          title(d) {
+            return `${d.toFixed(1)}ms`;
+          },
         }),
       ],
     };
@@ -183,16 +211,15 @@ export function NodeSummary(props: { node: TreeNode; rootMode?: boolean }) {
       },
       marks: [
         dangerZoneMark(domainEnd()),
-        Plot.rectY(
-          samples,
-          Plot.binX<{ fill: string }>(
+        Plot.rectY(samples, {
+          ...Plot.binX<{ fill: string }>(
             { y: "proportion" },
             {
-              x: { value: (d) => d, interval: props.rootMode ? undefined : 0.5 },
+              x: { value: (d) => d, interval: domainEnd() / BIN_COUNT },
               fill: "black",
             }
-          )
-        ),
+          ),
+        }),
       ],
       marginLeft: 10,
       marginRight: 10,
@@ -275,19 +302,6 @@ function scaledUpdateDelay(data: TrackerData): TrackerData {
     calls: data.calls,
     commits: data.commits,
   };
-}
-
-function DisplayError(props: { err: unknown }) {
-  return (
-    <Show
-      when={props.err instanceof Error}
-      fallback={<div>{(props.err as object).toString()}</div>}
-    >
-      <div>An error has occurred.</div>
-      <div>{(props.err as Error).toString()}</div>
-      <pre>{(props.err as Error).stack}</pre>
-    </Show>
-  );
 }
 
 export function RootSummary() {

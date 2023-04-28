@@ -314,6 +314,7 @@ export function RootSummary() {
 
     const scripts = Array.from((rec.data.scripts as Map<string, TrackerData>).entries());
     const roots = buildScriptTree(scripts.map(fromScriptEntry));
+    console.log(roots);
 
     return {
       key: encounterName(rec.encounter),

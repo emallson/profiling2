@@ -316,15 +316,12 @@ from_value!(Encounter(value) {
 
 #[derive(Debug, PartialEq, Clone, Serialize)]
 #[allow(non_snake_case)]
-#[wasm_bindgen]
 pub struct TrackerData {
-    #[wasm_bindgen(getter_with_clone)]
     pub stats: Stats,
     pub calls: u64,
     pub commits: u64,
     pub officialTime: Option<f64>,
     pub total_time: f64,
-    #[wasm_bindgen(getter_with_clone)]
     pub top5: Vec<f64>,
 }
 
@@ -399,6 +396,30 @@ impl<'a> TryFrom<Value<'a>> for Vec<f64> {
 }
 
 impl<'a, V: TryFrom<Value<'a>, Error = SavedVariablesError>> TryFrom<Value<'a>>
+    for HashMap<String, V>
+{
+    type Error = SavedVariablesError;
+
+    fn try_from(value: Value<'a>) -> Result<Self, Self::Error> {
+        match value {
+            Value::Table(Table::Named(data)) => {
+                data.into_iter()
+                    .try_fold(HashMap::new(), |mut map, (k, v)| {
+                        map.insert(k.to_string(), V::try_from(v)?);
+                        Ok(map)
+                    })
+            }
+            Value::Table(Table::Empty) => Ok(HashMap::new()),
+            _ => Err(SavedVariablesError::BadType {
+                name: "HashMap",
+                expected: "Monotyped Associative Table",
+                actual: format!("{:?}", value),
+            }),
+        }
+    }
+}
+
+impl<'a, V: TryFrom<Value<'a>, Error = SavedVariablesError>> TryFrom<Value<'a>>
     for HashMap<Cow<'a, str>, V>
 {
     type Error = SavedVariablesError;
@@ -443,16 +464,15 @@ try_optional_value!(f64);
 try_from_struct!((owned) TrackerData { stats, calls, commits, total_time, top5; officialTime });
 
 #[derive(Debug, PartialEq, Clone, Serialize)]
-#[wasm_bindgen]
 pub struct Stats {
     pub mean: f64,
     pub variance: Option<f64>,
     pub skew: Option<f64>,
-    #[wasm_bindgen(getter_with_clone)]
     pub samples: Vec<f64>,
+    pub quantiles: Option<HashMap<String, f64>>,
 }
 
-try_from_struct!((owned) Stats { mean, samples; variance, skew });
+try_from_struct!((owned) Stats { mean, samples; variance, skew, quantiles });
 
 #[derive(Debug, PartialEq)]
 pub struct Recording<'a> {

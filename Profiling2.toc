@@ -3,13 +3,13 @@
 ## Version: 0.0.1-dev
 ## SavedVariables: Profiling2_Storage
 
+libs\LibStub\LibStub.lua
+libs\LibDeflate\LibDeflate.lua
+libs\LibSerialize\LibSerialize.lua
+
 src\heap.lua
 src\moments.lua
 src\quantiles.lua
 src\reservoir.lua
 src\lib.lua
 src\console.lua
-
-libs\LibDeflate\LibDeflate.lua
-libs\LibSerialize\lib.xml
-libs\LibStub\LibStub.lua

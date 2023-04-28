@@ -254,12 +254,14 @@ from_value!(RecordingData(value) {
 #[allow(non_snake_case)]
 pub struct ParsedRecording<'a> {
     pub scripts: HashMap<Cow<'a, str>, TrackerData>,
+    // TODO: this shouldn't be an Option
+    pub externals: Option<HashMap<Cow<'a, str>, TrackerData>>,
     pub onUpdateDelay: TrackerData,
 }
 
 from_value!(ParsedRecording(value) {
   match value {
-    Value::Table(Table::Named(mut map)) => try_from_keys!(ParsedRecording(map) { scripts, onUpdateDelay }),
+    Value::Table(Table::Named(mut map)) => try_from_keys!(ParsedRecording(map) { scripts, onUpdateDelay; externals }),
     _ => Err(SavedVariablesError::BadType { name: "ParsedRecording", expected: "Named Table", actual: format!("{:?}", value) })
   }
 });
@@ -582,6 +584,29 @@ pub fn parse_compressed_recording(data: &str) -> Result<ParsedRecording<'_>, Sav
                         })
                     }
                 }
+            },
+            externals: if let Some(value) = map.remove("externals") {
+                Some(match value {
+                    Value::Table(Table::Named(map)) => map
+                        .into_iter()
+                        .map(|(k, v)| {
+                            Ok::<_, SavedVariablesError>((
+                                Cow::Owned(k.to_string()),
+                                TrackerData::try_from(v)?,
+                            ))
+                        })
+                        .collect::<Result<HashMap<_, _>, _>>()?,
+                    Value::Table(Table::Empty) => HashMap::new(),
+                    value => {
+                        return Err(SavedVariablesError::BadType {
+                            name: "ScriptEntry",
+                            expected: "Associative Table",
+                            actual: format!("{:?}", value),
+                        })
+                    }
+                })
+            } else {
+                None
             },
         }),
         value => {

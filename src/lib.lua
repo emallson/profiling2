@@ -3,11 +3,14 @@
 ---@field public moment_estimator MomentEstimatorNs
 ---@field public quantile QuantileNs
 ---@field public reservoir ReservoirNs
+---@field public tracker TrackerNs
 local ns = select(2, ...)
 
 ---@type string
 local thisAddonName = select(1, ...)
+---@class Profiling2CoreNs
 local profiling2 = {}
+ns.core = profiling2
 
 ---Get the name of the frame for path construction. Uses GetName if possible, falls back to GetDebugName if unset.
 ---@param frame Frame|ParentedObject
@@ -44,7 +47,7 @@ end
 
 ---@param frame Frame
 ---@return string
-local function addonName(frame)
+function profiling2.addonName(frame)
   local name = select(2, issecurevariable({ frame = frame }, 'frame')) or 'Unknown'
 
   -- blizzard frames will return our own addon name because we built the table.
@@ -65,7 +68,7 @@ end
 ---@param frame Frame
 ---@return string
 function profiling2.frameKey(frame)
-  return profiling2.buildFrameKey(addonName(frame), frameName(frame), frame:GetParent())
+  return profiling2.buildFrameKey(profiling2.addonName(frame), frameName(frame), frame:GetParent())
 end
 
 ---check if script profiling is enabled
@@ -74,152 +77,8 @@ function ns.isScriptProfilingEnabled()
     return C_CVar.GetCVarBool("scriptProfile") or false
 end
 
----The index of the current frame. managed by an `OnUpdate` script
-local frameIndex = 0
-local currentEncounter = nil
-local currentMythicPlus = nil
----Whether we are currently in a context that requires tracking. Generally false outside of raid/m+, true within.
-local function trackingEnabled()
-  return currentEncounter ~= nil or currentMythicPlus ~= nil
-end
-
----@class ScriptTracker
----@field public heap TinyMinHeap
----@field public moments MomentEstimator
----@field public quantiles QuantileEstimator
----@field public total_time number
----@field public commits number The number of frame values committed. Should be equal to the number of frames in which the tracked method was called.
----@field public reservoir ReservoirSampler
----@field private frame_time number The amount of time spent in the most recent frame
----@field private frame_calls number The amount of time it has been called this frame
----@field private lastIndex number The index of the last seen frame
-local trackerBase = {}
-
-function trackerBase:shouldCommit()
-  return self.frame_time > 0 and self.lastIndex ~= frameIndex
-end
-
-function trackerBase:commit()
-  self.moments:update(self.frame_time)
-  self.heap:push(self.frame_time)
-  self.quantiles:update(self.frame_time)
-  self.reservoir:update(self.frame_time)
-  self.total_time = self.total_time + self.frame_time
-  self.total_calls = self.total_calls + self.frame_calls
-  self.commits = self.commits + 1
-  self.frame_calls = 0
-  self.frame_time = 0
-  self.lastIndex = frameIndex
-end
-
----Record the amount of time taken for a single call of the method being tracked.
----@param call_time number
-function trackerBase:record(call_time)
-  if not trackingEnabled() then
-    return
-  end
-  if self:shouldCommit() then
-    self:commit()
-  end
-  self.frame_calls = self.frame_calls + 1
-  self.frame_time = self.frame_time + call_time
-end
-
-function trackerBase:shouldExport()
-  if self:shouldCommit() then
-    self:commit()
-  end
-  return self.commits > 0
-end
-
----Convert the tracker into a string-keyed table for storage
----@return table
-function trackerBase:export()
-  -- do a last check to see if we have uncommitted frame data
-  if self:shouldCommit() then
-    self:commit()
-  end
-  local stats = {
-    mean = self.moments:mean(),
-    quantiles = self.quantiles:quantiles(),
-    samples = self.reservoir:samples(),
-  }
-
-  if self.moments:sample_count() >= 2 then
-    stats.variance = self.moments:variance()
-  end
-  if self.moments:sample_count() >= 3 then
-    stats.skew = self.moments:skewness()
-  end
-
-  return {
-    commits = self.commits,
-    calls = self.total_calls,
-    total_time = self.total_time,
-    stats = stats,
-    top5 = self.heap:contents()
-  }
-end
-
-function trackerBase:reset()
-  self.commits = 0
-  self.total_time = 0
-  self.frame_time = 0
-  self.total_calls = 0
-  self.frame_calls = 0
-  self.lastIndex = frameIndex
-  self.moments:reset()
-  self.quantiles:reset()
-  self.reservoir:reset()
-  self.heap:clear()
-end
-
-local trackerMeta = {
-  __index = trackerBase
-}
-
-local trackers = {}
-
----Get a tracker. If no params provided, will be a new anonymous tracker.
----Otherwise, will be the tracker for the (frame, scriptType) combo, which 
----is re-used across SetScript calls.
----
----This may mean that you end up merging multiple different functions, but 
----we can't rely on function identity for sameness due to the common use ofs
----lambdas (which have distinct identities even for identical bodies).
----
----@param frame any|nil
----@param scriptType string|nil
----@return ScriptTracker
-local function getScriptTracker(frame, scriptType)
-  if frame and trackers[frame] and trackers[frame][scriptType] then
-    return trackers[frame][scriptType]
-  end
-  local tracker = {
-    heap = ns.heap.new(5),
-    moments = ns.moment_estimator.new(),
-    quantiles = ns.quantile.new(),
-    reservoir = ns.reservoir.new(200),
-    total_time = 0,
-    total_calls = 0,
-    frame_time = 0,
-    frame_calls = 0,
-    commits = 0,
-    lastIndex = frameIndex,
-  }
-
-  setmetatable(tracker, trackerMeta)
-
-  if frame and scriptType then
-    trackers[frame] = trackers[frame] or {}
-    trackers[frame][scriptType] = tracker
-  end
-
-  return tracker
-end
-
 local instrumentedCount = 0
-local function buildWrapper(tracker, wrappedFn)
+function profiling2.buildWrapper(tracker, wrappedFn)
   local function result(...)
     local startTime = debugprofilestop()
     securecallfunction(wrappedFn, ...)
@@ -289,11 +148,11 @@ local function hookCreateFrame()
     local key = strjoin(':', frameKey, scriptType)
     -- print('hooking frame: ' .. frameKey)
 
-    local tracker = getScriptTracker(frame, scriptType)
+    local tracker = ns.tracker.getScriptTracker(frame, scriptType)
     local wrappedFn = function(...) fn(...) end
     profiling2.registerFunction(key, wrappedFn, tracker)
 
-    local scriptWrapper = buildWrapper(tracker, wrappedFn)
+    local scriptWrapper = profiling2.buildWrapper(tracker, wrappedFn)
 
     -- we use the original SetScript method to avoid triggering loops
     -- hooksecurefunc(t, f, h) basically works by replacing t[f] with 
@@ -333,6 +192,8 @@ end
 
 ---@type table<string, TrackedFn>
 local trackedFunctions = {}
+---@type table<string, TrackedFn>
+local trackedExternals = {}
 
 ---add a function to be tracked
 ---@param key string
@@ -345,49 +206,71 @@ function profiling2.registerFunction(key, fn, tracker)
   }
 end
 
-local renderTracker = getScriptTracker()
+---add an external function to be tracked
+---@param key string
+---@param fn function
+---@param tracker ScriptTracker
+function profiling2.registerExternalFunction(key, fn, tracker)
+  trackedExternals[key] = {
+    fn = fn,
+    tracker = tracker,
+  }
+end
+
+local renderTracker = ns.tracker.getScriptTracker()
 
 function renderTracker:renderCount()
   return self.commits
 end
 
-function profiling2.buildUsageTable()
+local function buildInternalUsageTable(trackedMap)
   local scripts = {}
-  for key, value in pairs(trackedFunctions) do
+  for key, value in pairs(trackedMap) do
     if value.tracker:shouldExport() then
       scripts[key] = value.tracker:export()
       scripts[key].officialTime = GetFunctionCPUUsage(value.fn, true)
     end
   end
+
+  return scripts
+end
+
+function profiling2.buildUsageTable()
   local results = {
     onUpdateDelay = renderTracker:export(),
-    scripts = scripts
+    scripts = buildInternalUsageTable(trackedFunctions),
+    externals = buildInternalUsageTable(trackedExternals),
   }
 
   return results
 end
 
-function profiling2.resetTrackers()
-  for _, value in ipairs(trackedFunctions) do
+local function resetAll(trackedMap)
+  for _, value in ipairs(trackedMap) do
     value.tracker:reset()
   end
+end
+
+function profiling2.resetTrackers()
+  resetAll(trackedFunctions)
+  resetAll(trackedExternals)
   renderTracker:reset()
 end
 
 function profiling2.startEncounter(encounterId, encounterName, difficultyId, groupSize)
-  if currentMythicPlus ~= nil then
+  if ns.tracker.isEncounterInProgress() then
     return
   end
   profiling2.resetTrackers()
   ResetCPUUsage()
-  currentEncounter = {
+  ns.tracker.setEncounter({
     kind = "raid",
     encounterId = encounterId,
     encounterName = encounterName,
     difficultyId = difficultyId,
     groupSize = groupSize,
     startTime = time()
-  }
+  })
 end
 
 local MAX_RECORDINGS = 50
@@ -433,6 +316,7 @@ local function insertRecording(recording)
 end
 
 function profiling2.encounterEnd(encounterID, encounterName, difficultyID, groupSize, success)
+  local currentEncounter = ns.tracker.getCurrentEncounter()
   if currentEncounter == nil then
     -- don't do anything if we didn't see the encounter start. a mid-combat reload probably happened or we're in a key
     return
@@ -445,32 +329,33 @@ function profiling2.encounterEnd(encounterID, encounterName, difficultyID, group
     data = profiling2.buildUsageTable()
   })
   profiling2.resetTrackers()
-  currentEncounter = nil
+  ns.tracker.setEncounter(nil)
 end
 
 ---@param mapId number
 function profiling2.startMythicPlus(mapId)
   profiling2.resetTrackers()
   ResetCPUUsage()
-  currentMythicPlus = {
+  ns.tracker.setMythicPlus({
     kind = "mythicplus",
     mapId = mapId,
     groupSize = 5,
     startTime = time()
-  }
+  })
 end
 
 -- manual start/stop methods for testing in town
 function ns.start()
   profiling2.resetTrackers()
   ResetCPUUsage()
-  currentEncounter = {
+  ns.tracker.setEncounter({
     kind = "manual",
     startTime = time()
-  }
+  })
 end
 
 function ns.stop()
+  local currentEncounter = ns.tracker.getCurrentEncounter()
   if currentEncounter == nil then
     -- we didn't start an encounter
     return
@@ -482,12 +367,13 @@ function ns.stop()
     data = profiling2.buildUsageTable()
   })
   profiling2.resetTrackers()
-  currentEncounter = nil
+  ns.tracker.setEncounter(nil)
 end
 
 ---@param isCompletion boolean
 ---@param mapId number|nil
 function profiling2.endMythicPlus(isCompletion, mapId)
+  local currentMythicPlus = ns.tracker.getCurrentEncounter()
   if currentMythicPlus == nil then
     return
   end
@@ -499,11 +385,11 @@ function profiling2.endMythicPlus(isCompletion, mapId)
     data = profiling2.buildUsageTable()
   })
   profiling2.resetTrackers()
-  currentMythicPlus = nil
+  ns.tracker.setMythicPlus(nil)
 end
 
 function ns.printStatus()
-  print("Profiling2 Status: " .. ((currentEncounter or currentMythicPlus) and "|cff00ff00Active|r" or "|cffff0000Inactive|r"))
+  print("Profiling2 Status: " .. (ns.tracker.isEncounterInProgress() and "|cff00ff00Active|r" or "|cffff0000Inactive|r"))
   print("scriptProfile CVar Status: " .. (ns.isScriptProfilingEnabled() and "|cff00ff00On|r" or "|cffff0000Off|r"))
   print("Instrumented Scripts: " .. instrumentedCount)
   print("Renders Recorded: " .. renderTracker:renderCount())
@@ -519,7 +405,7 @@ if ns.isScriptProfilingEnabled() then
   frame:RegisterEvent("CHALLENGE_MODE_RESET")
   frame:SetScript("OnUpdate", function(_, elapsed)
     renderTracker:record(elapsed)
-    frameIndex = frameIndex + 1
+    ns.tracker.nextFrame()
   end)
   frame:SetScript("OnEvent", function(_, eventName, ...)
     if eventName == "ENCOUNTER_START" then

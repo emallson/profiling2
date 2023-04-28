@@ -7,15 +7,14 @@
 ---@type ProfilingNs
 local ns = select(2, ...)
 
-local listener = CreateFrame('Frame', 'Profiling2Inject')
 local LibDeflate = LibStub("LibDeflate")
-
-listener:RegisterEvent("ADDON_LOADED")
 
 local function injectWA()
   if WeakAuras then
     ---@type function
     local origLoadFunction = WeakAuras.LoadFunction
+
+    local trackers = {}
 
     function WeakAuras.LoadFunction(contents)
       local fn = origLoadFunction(contents)
@@ -24,16 +23,24 @@ local function injectWA()
         return nil
       end
 
-      local tracker = ns.tracker.getScriptTracker()
       local registrationComplete = false
 
       local triggerKey = LibDeflate:EncodeForPrint(LibDeflate:CompressDeflate(contents))
 
-      local wrapped = ns.core.buildWrapper(tracker, fn)
+      local wrapped
       local outer = function(...)
         if not registrationComplete then
+          -- this guards against repeat LoadFunction calls
+          -- we also don't necessarily have aura_env.id yet when the LoadFunction call runs
           local env = getfenv(fn).aura_env
           local path = '@WeakAuras/Auras/' .. env.id .. '/' .. triggerKey .. ':CustomFn'
+
+          if trackers[path] == nil then
+            trackers[path] = ns.tracker.getScriptTracker()
+          end
+
+          local tracker = trackers[path]
+          wrapped = ns.core.buildWrapper(tracker, fn)
           ns.core.registerExternalFunction(path, wrapped, tracker)
           registrationComplete = true
         end
@@ -46,13 +53,14 @@ local function injectWA()
   end
 end
 
-listener:SetScript("OnEvent", function(frame, eventName, addonName)
-  if addonName == 'WeakAuras' then
-    injectWA()
-  end
-end)
 
---#region WeakAuras2
+if ns.isScriptProfilingEnabled() then
+  local listener = CreateFrame('Frame', 'Profiling2Inject')
+  listener:RegisterEvent("ADDON_LOADED")
 
-
---#endregion
+  listener:SetScript("OnEvent", function(frame, eventName, addonName)
+    if addonName == 'WeakAuras' then
+      injectWA()
+    end
+  end)
+end

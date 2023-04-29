@@ -31,6 +31,11 @@ function trackerNs.getCurrentEncounter()
   return currentMythicPlus or currentEncounter
 end
 
+---@return boolean
+function trackerNs.isMythicPlusActive()
+  return currentMythicPlus ~= nil
+end
+
 ---Whether we are currently in a context that requires tracking. Generally false outside of raid/m+, true within.
 local function trackingEnabled()
   return trackerNs.isEncounterInProgress()

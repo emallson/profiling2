@@ -182,6 +182,7 @@ export function ChildSummary(props: {
       <ChildLabel
         class={props.selected ? selectedChildStyle : undefined}
         onClick={() => props.onClick()}
+        title={props.child.key}
       >
         {props.child.key}
       </ChildLabel>
@@ -344,8 +345,19 @@ export function RootSummary() {
 
     const scripts = Array.from((rec.data.scripts as Map<string, TrackerData>).entries());
     const externals = Array.from((rec.data.externals as Map<string, TrackerData>).entries());
-    const roots = buildScriptTree(scripts.concat(externals).map(fromScriptEntry));
-    console.log(roots);
+    const scriptRoots = buildScriptTree(scripts.map(fromScriptEntry));
+    const externalRoots = buildScriptTree(externals.map(fromScriptEntry));
+
+    const roots = {
+      "Frame Scripts": {
+        key: "Frame Scripts",
+        children: scriptRoots,
+      },
+      "External Functions": {
+        key: "External Functions",
+        children: externalRoots,
+      },
+    };
 
     return {
       key: encounterName(rec.encounter),

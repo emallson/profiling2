@@ -33,7 +33,7 @@ local function injectWA()
           -- this guards against repeat LoadFunction calls
           -- we also don't necessarily have aura_env.id yet when the LoadFunction call runs
           local env = getfenv(fn).aura_env
-          local path = '@WeakAuras/Auras/' .. env.id .. '/' .. triggerKey .. ':CustomFn'
+          local path = '@WeakAuras/Auras/' .. env.id .. '/dec:' .. triggerKey .. ':CustomFn'
 
           if trackers[path] == nil then
             trackers[path] = ns.tracker.getScriptTracker()

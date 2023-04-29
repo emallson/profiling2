@@ -1,14 +1,9 @@
 use std::{cell::RefCell, rc::Rc};
 
 use ouroboros::self_referencing;
-use parser::{
-    ParsedRecording, Recording, SavedVariablesError,
-};
+use parser::{ParsedRecording, Recording, SavedVariablesError};
 
-use wasm_bindgen::{
-    prelude::{wasm_bindgen},
-    JsValue,
-};
+use wasm_bindgen::{prelude::wasm_bindgen, JsValue};
 
 use crate::parser::RecordingData;
 
@@ -127,4 +122,10 @@ pub fn parse_saved_variables(blob: String) -> Result<SavedVariablesRef, JsValue>
     );
 
     Ok(SavedVariablesRef { inner: data })
+}
+
+#[wasm_bindgen]
+pub fn decompress_string(blob: String) -> Result<String, JsValue> {
+    let decompressed = parser::decompress::decompress(&blob).map_err(|v| format!("{}", v))?;
+    Ok(String::from_utf8(decompressed).map_err(|v| format!("{}", v))?)
 }

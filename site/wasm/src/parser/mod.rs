@@ -19,7 +19,7 @@ use self::{
     deserialize::deserialize,
 };
 
-mod decompress;
+pub(crate) mod decompress;
 mod deserialize;
 
 type IResult<'a, O> = nom::IResult<&'a str, O, VerboseError<&'a str>>;

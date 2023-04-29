@@ -52,6 +52,14 @@ const trackerData = z.object({
   top5: z.number().array().max(5),
 });
 
+const decodePathComponent = (s: string) => {
+  if (s.startsWith("dec:")) {
+    return parser.decompress_string(s.substring(4));
+  } else {
+    return s;
+  }
+};
+
 const keypath = z.string().transform((val) => {
   const colons = val.split(":");
   const scriptName = colons.at(-1)!;
@@ -66,8 +74,8 @@ const keypath = z.string().transform((val) => {
   return {
     addonName: addonName!,
     scriptName,
-    frameName: path.at(-1)!,
-    framePath: path.slice(1, -1),
+    frameName: decodePathComponent(path.at(-1)!),
+    framePath: path.slice(1, -1).map(decodePathComponent),
   };
 });
 

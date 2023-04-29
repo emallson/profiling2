@@ -318,7 +318,7 @@ end
 
 function profiling2.encounterEnd(encounterID, encounterName, difficultyID, groupSize, success)
   local currentEncounter = ns.tracker.getCurrentEncounter()
-  if currentEncounter == nil then
+  if currentEncounter == nil or ns.tracker.isMythicPlusActive() then
     -- don't do anything if we didn't see the encounter start. a mid-combat reload probably happened or we're in a key
     return
   end

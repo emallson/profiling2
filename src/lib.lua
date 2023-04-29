@@ -4,6 +4,7 @@
 ---@field public quantile QuantileNs
 ---@field public reservoir ReservoirNs
 ---@field public tracker TrackerNs
+---@field public external Profiling2
 local ns = select(2, ...)
 
 ---@type string
@@ -81,11 +82,11 @@ local instrumentedCount = 0
 function profiling2.buildWrapper(tracker, wrappedFn)
   local function result(...)
     local startTime = debugprofilestop()
-    local result = securecallfunction(wrappedFn, ...)
+    local result = {securecallfunction(wrappedFn, ...)}
     local endTime = debugprofilestop()
 
     tracker:record(endTime - startTime)
-    return result
+    return unpack(result)
   end
 
   instrumentedCount = instrumentedCount + 1
@@ -242,7 +243,6 @@ function profiling2.buildUsageTable()
     scripts = buildInternalUsageTable(trackedFunctions),
     externals = buildInternalUsageTable(trackedExternals),
   }
-
   return results
 end
 

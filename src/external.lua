@@ -36,10 +36,12 @@ end
 ---@see Profiling2.trackedFunction 
 ---
 ---@param table table
----@param key string
----@param methodName string
+---@param tableKey string
+---@param methodNames table<string> 
 ---@return table
-function externalNs.trackMethod(table, key, methodName)
-  table[methodName] = externalNs.trackedFunction(key, table[methodName])
+function externalNs.trackMethods(table, tableKey, methodNames)
+  for _, methodName in ipairs(methodNames) do
+    table[methodName] = externalNs.trackedFunction(tableKey .. ':' .. methodName, table[methodName])
+  end
   return table
 end

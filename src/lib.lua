@@ -247,7 +247,7 @@ function profiling2.buildUsageTable()
 end
 
 local function resetAll(trackedMap)
-  for _, value in ipairs(trackedMap) do
+  for _, value in pairs(trackedMap) do
     value.tracker:reset()
   end
 end

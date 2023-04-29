@@ -4,9 +4,13 @@ import { ErrorBoundary, Show } from "solid-js";
 import { SavedVariablesProvider, useSavedVariables } from "./SavedVariablesContext";
 import FilePickerPage from "./FilePickerPage";
 import EncounterSelector from "./EncounterSelector";
-import EncounterDetails from "./EncounterDetails";
 import { RootSummary } from "./NodeSummary";
 import DisplayError from "./DisplayError";
+import { globalStyle } from "@macaron-css/core";
+
+globalStyle("body", {
+  margin: 0,
+});
 
 const LoadingBlocker = () => {
   const { store } = useSavedVariables();
@@ -14,7 +18,6 @@ const LoadingBlocker = () => {
   return (
     <Show when={store?.().success} fallback={<FilePickerPage />}>
       <EncounterSelector>
-        <EncounterDetails />
         <RootSummary />
       </EncounterSelector>
     </Show>

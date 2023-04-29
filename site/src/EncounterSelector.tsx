@@ -108,6 +108,7 @@ const PageLayout = styled("div", {
     display: "grid",
     gridTemplateColumns: "max-content 1fr",
     gap: "1em",
+    maxWidth: "100vw",
   },
 });
 

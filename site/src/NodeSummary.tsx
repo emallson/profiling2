@@ -193,6 +193,9 @@ export function ChildSummary(props: {
 const NodeContainer = styled("div", {
   base: {
     maxWidth: 860,
+    ":last-child": {
+      paddingRight: "1em",
+    },
   },
 });
 
@@ -246,7 +249,14 @@ export function NodeSummary(props: { node: TreeNode; rootMode?: boolean }) {
 
   return (
     <>
-      <NodeContainer>
+      <NodeContainer
+        ref={(ref) =>
+          setTimeout(
+            () => ref.scrollIntoView({ behavior: "smooth", block: "start", inline: "end" }),
+            10
+          )
+        }
+      >
         <section>
           <header>
             <Title>{props.node.key}</Title>
@@ -295,6 +305,9 @@ const RootContainer = styled("div", {
     gridAutoColumns: "max-content",
     gridAutoFlow: "column",
     gap: "2em",
+    maxWidth: "100%",
+    overflowX: "auto",
+    paddingRight: "1em",
   },
 });
 

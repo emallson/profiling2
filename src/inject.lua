@@ -81,7 +81,7 @@ local function injectPlater()
     -- Plater uses a structured chunkName that allows us to reverse it
     local function parseChunkName(chunkname)
       local _, _, scriptType, scriptName = string.find(chunkname, '^(.+) for (.+)$')
-      return scriptType, select(1, string.gsub(scriptName, '[/:]', '.'))
+      return scriptType, scriptName
     end
 
     local function wrappedLoadString(baseKey)
@@ -97,7 +97,8 @@ local function injectPlater()
 
           local wrapper = ns.core.buildWrapper(tracker, result)
           local scriptType, scriptName = parseChunkName(chunkname)
-          local key = baseKey .. '/' .. scriptName .. ':' .. scriptType
+          scriptName = LibDeflate:EncodeForPrint(LibDeflate:CompressDeflate(scriptName))
+          local key = baseKey .. '/dec:' .. scriptName .. ':' .. scriptType
           ns.core.registerExternalFunction(key, wrapper, tracker)
           return wrapper, err
         else

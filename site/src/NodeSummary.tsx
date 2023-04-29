@@ -21,6 +21,11 @@ const Title = styled("span", {
     fontWeight: "bold",
     fontSize: "125%",
     fontFamily: "serif",
+    maxWidth: "20em",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+    overflowX: "hidden",
+    display: "inline-block",
   },
 });
 
@@ -105,6 +110,15 @@ const dangerZoneMark = (max: number) =>
 
 const BIN_COUNT = 33;
 
+const ChildLabel = styled("span", {
+  base: {
+    maxWidth: "20em",
+    textOverflow: "ellipsis",
+    overflowX: "hidden",
+    whiteSpace: "nowrap",
+  },
+});
+
 export function ChildSummary(props: {
   child: TreeNode;
   onClick: () => void;
@@ -165,9 +179,12 @@ export function ChildSummary(props: {
   });
   return (
     <>
-      <span class={props.selected ? selectedChildStyle : undefined} onClick={() => props.onClick()}>
+      <ChildLabel
+        class={props.selected ? selectedChildStyle : undefined}
+        onClick={() => props.onClick()}
+      >
         {props.child.key}
-      </span>
+      </ChildLabel>
       <Chart plot={plot()} />
     </>
   );
@@ -313,7 +330,8 @@ export function RootSummary() {
     }
 
     const scripts = Array.from((rec.data.scripts as Map<string, TrackerData>).entries());
-    const roots = buildScriptTree(scripts.map(fromScriptEntry));
+    const externals = Array.from((rec.data.externals as Map<string, TrackerData>).entries());
+    const roots = buildScriptTree(scripts.concat(externals).map(fromScriptEntry));
     console.log(roots);
 
     return {

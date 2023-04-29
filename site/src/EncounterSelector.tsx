@@ -45,7 +45,7 @@ const selectedStyle = style({
 const EncounterEntry = (props: { encounter: Encounter; onClick: () => void }) => {
   const recording = useSelectedRecording();
   const style = createMemo(() =>
-    recording()?.encounter === props.encounter ? selectedStyle : undefined
+    recording()?.encounter.startTime === props.encounter.startTime ? selectedStyle : undefined
   );
   return (
     <div class={style()} onClick={() => props.onClick()}>
@@ -63,6 +63,8 @@ const ListContainer = styled("div", {
     borderRight: "1px solid #333",
     width: "max-content",
     padding: "0 1em",
+    maxHeight: "98vh",
+    overflowY: "auto",
   },
 });
 

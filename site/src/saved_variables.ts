@@ -75,7 +75,7 @@ const keypath = z.string().transform((val) => {
     addonName: addonName!,
     scriptName,
     frameName: decodePathComponent(path.at(-1)!),
-    framePath: path.slice(1, -1).map(decodePathComponent),
+    framePath: path.slice(0, -1).map(decodePathComponent),
   };
 });
 

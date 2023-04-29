@@ -81,10 +81,11 @@ local instrumentedCount = 0
 function profiling2.buildWrapper(tracker, wrappedFn)
   local function result(...)
     local startTime = debugprofilestop()
-    securecallfunction(wrappedFn, ...)
+    local result = securecallfunction(wrappedFn, ...)
     local endTime = debugprofilestop()
 
     tracker:record(endTime - startTime)
+    return result
   end
 
   instrumentedCount = instrumentedCount + 1

@@ -46,7 +46,7 @@ function profiling2.buildFrameKey(addonName, name, origParent)
   return key
 end
 
----@param frame Frame
+---@param frame any
 ---@return string
 function profiling2.addonName(frame)
   local name = select(2, issecurevariable({ frame = frame }, 'frame')) or 'Unknown'

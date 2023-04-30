@@ -1,0 +1,22 @@
+name: build-wasm
+on: [push]
+jobs:
+  build:
+    name: 'Build WASM Bundle'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - run: |
+          rustup set auto-self-update disable
+          rustup toolchain install stable --profile minimal
+
+      - uses: Swatinem/rust-cache@v2
+      - run: |
+          cargo install wasm-pack --no-default-features
+          cd site/wasm && wasm-pack build
+
+      - uses: actions/upload-artifact@v3
+        with:
+          name: wasm-bundle
+          path: site/wasm/pkg
+          if-no-files-found: error

@@ -1,6 +1,6 @@
 ## Interface: 10000
 ## Title: !Profiling2
-## Version: 0.0.1-dev
+## Version: @project-version@
 ## SavedVariables: Profiling2_Storage
 
 libs\LibStub\LibStub.lua

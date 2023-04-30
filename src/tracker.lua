@@ -2,7 +2,12 @@
 local ns = select(2, ...)
 
 ---@class TrackerNs
-local trackerNs = {}
+local trackerNs = {
+  DependentType = {
+    Dependent = true,
+    Independent = false,
+  }
+}
 
 
 ---The index of the current frame. managed by an `OnUpdate` script
@@ -51,6 +56,7 @@ end
 ---@field private frame_time number The amount of time spent in the most recent frame
 ---@field private frame_calls number The amount of time it has been called this frame
 ---@field private lastIndex number The index of the last seen frame
+---@field private dependent? boolean
 local trackerBase = {}
 
 function trackerBase:shouldCommit()
@@ -115,7 +121,8 @@ function trackerBase:export()
     calls = self.total_calls,
     total_time = self.total_time,
     stats = stats,
-    top5 = self.heap:contents()
+    top5 = self.heap:contents(),
+    dependent = self.dependent or false
   }
 end
 
@@ -168,7 +175,7 @@ end
 ---@param frame any|nil
 ---@param scriptType string|nil
 ---@return ScriptTracker
-function trackerNs.getScriptTracker(frame, scriptType)
+function trackerNs.getFrameScriptTracker(frame, scriptType)
   if frame and trackers[frame] and trackers[frame][scriptType] then
     return trackers[frame][scriptType]
   end
@@ -180,6 +187,15 @@ function trackerNs.getScriptTracker(frame, scriptType)
     trackers[frame][scriptType] = tracker
   end
 
+  return tracker
+end
+
+---Get an anonymous script tracker. If the script may be called as a result of another script, it should be
+---marked as dependent
+---@param dependent? boolean
+function trackerNs.getScriptTracker(dependent)
+  local tracker = buildTracker()
+  tracker.dependent = dependent
   return tracker
 end
 

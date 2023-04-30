@@ -150,7 +150,7 @@ local function hookCreateFrame()
     local key = strjoin(':', frameKey, scriptType)
     -- print('hooking frame: ' .. frameKey)
 
-    local tracker = ns.tracker.getScriptTracker(frame, scriptType)
+    local tracker = ns.tracker.getFrameScriptTracker(frame, scriptType)
     local wrappedFn = function(...) fn(...) end
     profiling2.registerFunction(key, wrappedFn, tracker)
 
@@ -243,6 +243,7 @@ function profiling2.buildUsageTable()
     scripts = buildInternalUsageTable(trackedFunctions),
     externals = buildInternalUsageTable(trackedExternals),
   }
+
   return results
 end
 

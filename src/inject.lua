@@ -63,7 +63,7 @@ local function trackAllMethods(table, tableKey)
   for methodName, _ in pairs(table) do
     local method = rawget(table, methodName)
     if method ~= nil and type(method) == "function" then
-      local tracker = ns.tracker.getScriptTracker()
+      local tracker = ns.tracker.getScriptTracker(ns.tracker.DependentType.Dependent)
       local key = tableKey .. ':' .. methodName
       table[methodName] = ns.core.buildWrapper(tracker, method)
       ns.core.registerExternalFunction(key, table[methodName], tracker)

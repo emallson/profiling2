@@ -2,7 +2,7 @@ name: build-wasm
 on: [push]
 jobs:
   build:
-    name: 'Build WASM Bundle'
+    name: 'Build Production Bundle'
     runs-on: ubuntu-latest
 
     env:
@@ -19,12 +19,36 @@ jobs:
           workspaces: |
             site/wasm
 
-      - run: |
-          cargo install wasm-pack --no-default-features
+      - name: Build WASM Bundle
+        run: |
+          cargo install wasm-pack --no-default-features --locked
           cd site/wasm && wasm-pack build
+
+      - name: Setup Node
+        uses: actions/setup-node@v3
+
+      - name: Install Pnpm
+        run: npm install -g pnpm
+
+      - name: Get pnpm store directory
+        id: pnpm-cache
+        shell: bash
+        run: |
+          echo "STORE_PATH=$(pnpm store path)" >> $GITHUB_OUTPUT
+
+      - uses: actions/cache@v3
+        name: Setup pnpm cache
+        with:
+          path: ${{ steps.pnpm-cache.outputs.STORE_PATH }}
+          key: pnpm-store-${{ hashFiles('site/pnpm-lock.yaml') }}
+          restore-keys: |
+            pnpm-store-
+
+      - name: Install Node dependencies
+        run: cd site && pnpm install && pnpm run build
 
       - uses: actions/upload-artifact@v3
         with:
-          name: wasm-bundle
-          path: site/wasm/pkg
+          name: production-bundle
+          path: site/dist
           if-no-files-found: error

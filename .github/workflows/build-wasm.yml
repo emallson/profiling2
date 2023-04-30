@@ -4,6 +4,10 @@ jobs:
   build:
     name: 'Build WASM Bundle'
     runs-on: ubuntu-latest
+
+    env:
+      CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
+
     steps:
       - uses: actions/checkout@v3
       - run: |
@@ -11,6 +15,10 @@ jobs:
           rustup toolchain install stable --profile minimal
 
       - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            site/wasm
+
       - run: |
           cargo install wasm-pack --no-default-features
           cd site/wasm && wasm-pack build

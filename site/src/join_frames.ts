@@ -3,6 +3,7 @@ import { ScriptEntry } from "./saved_variables";
 export type JoinDatum = {
   stats: Required<Pick<ScriptEntry["stats"], "samples">>;
   commits: ScriptEntry["commits"];
+  dependent?: ScriptEntry["dependent"];
 };
 export type JoinData = Array<JoinDatum>;
 
@@ -38,17 +39,26 @@ function sample_sum(data: JoinData, weights: number[]): number {
 
   // handle the case that we didn't sample anything. this truncates 0s
   if (result === 0) {
-    const f = Math.random();
-    let cum = 0;
-    for (let i = 0; i < data.length; i++) {
-      cum += weights[i];
-      if (f <= cum) {
-        return uniform_choice(data[i].stats.samples);
-      }
-    }
+    return sample_any(
+      data.map((datum) => datum.stats.samples),
+      weights
+    );
   }
 
   return result;
+}
+
+function sample_any(data: number[][], weights: number[]): number {
+  const f = Math.random();
+  let cum = 0;
+  for (let i = 0; i < data.length; i++) {
+    cum += weights[i];
+    if (f <= cum) {
+      return uniform_choice(data[i]);
+    }
+  }
+
+  throw new Error(`sample_any failed to pick a sample: ${f} ${cum} ${data.length}`);
 }
 
 /**
@@ -77,15 +87,82 @@ function sample_sum(data: JoinData, weights: number[]): number {
  * In keeping with the underlying sampling distributions (which truncate 0 for display), we also
  * truncate zero by guaranteeing that at least one frame activates for our combined sample.
  */
-export default function join_data(data: JoinData, sample_count = 100): number[] {
+export function join_data_sum(data: JoinData, sample_count = 10, min_samples = 100): number[] {
   const weights = build_weights(data);
 
   const samples = [];
-  for (let i = 0; i < sample_count * data.length; i++) {
+  for (let i = 0; i < Math.max(sample_count * data.length, min_samples); i++) {
     samples.push(sample_sum(data, weights));
   }
 
   return samples;
+}
+
+/**
+ * Analogue of `join_data_sum` that effectively unions the distributions instead of summing them.
+ *
+ * This is used in cases where independence is almost certainly the incorrect assumption.
+ */
+export function join_data_union(data: JoinData, sample_count = 10, min_samples = 100): number[] {
+  const weights = build_weights(data);
+  const data_samples = data.map((datum) => datum.stats.samples);
+
+  return join_data_union_raw(data_samples, weights, sample_count, min_samples);
+}
+
+function join_data_union_raw(
+  data: number[][],
+  weights: number[],
+  sample_count = 10,
+  min_samples = 100
+): number[] {
+  const samples = [];
+  for (let i = 0; i < Math.max(sample_count * data.length, min_samples); i++) {
+    samples.push(sample_any(data, weights));
+  }
+
+  return samples;
+}
+
+/**
+ * Join data, intelligently handling both independent (sum) and dependent (union) types.
+ */
+export function join_data(data: JoinData, sample_count = 10, min_samples = 100): number[] {
+  if (data.length === 0) {
+    throw new Error("cannot join empty data");
+  }
+
+  const independent = data.filter((datum) => !datum.dependent);
+  const dependent = data.filter((datum) => datum.dependent);
+
+  let indep_samples: number[] = [];
+  let dep_samples: number[] = [];
+
+  if (independent.length > 0) {
+    indep_samples = join_data_sum(independent, sample_count, min_samples);
+  }
+  if (dependent.length > 0) {
+    dep_samples = join_data_union(dependent, sample_count, min_samples);
+  }
+
+  if (independent.length === 0) {
+    return dep_samples;
+  } else if (dependent.length === 0) {
+    return indep_samples;
+  }
+
+  const weights = [
+    Math.max.apply(
+      null,
+      independent.map((v) => v.commits)
+    ),
+    Math.max.apply(
+      null,
+      dependent.map((v) => v.commits)
+    ),
+  ];
+
+  return join_data_union_raw([indep_samples, dep_samples], weights, sample_count, min_samples);
 }
 
 /**

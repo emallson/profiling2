@@ -323,6 +323,7 @@ pub struct TrackerData {
     pub calls: u64,
     pub commits: u64,
     pub officialTime: Option<f64>,
+    pub dependent: Option<bool>,
     pub total_time: f64,
     pub top5: Vec<f64>,
 }
@@ -463,7 +464,7 @@ macro_rules! try_optional_value {
 
 try_optional_value!(f64);
 
-try_from_struct!((owned) TrackerData { stats, calls, commits, total_time, top5; officialTime });
+try_from_struct!((owned) TrackerData { stats, calls, commits, total_time, top5; officialTime, dependent });
 
 #[derive(Debug, PartialEq, Clone, Serialize)]
 pub struct Stats {

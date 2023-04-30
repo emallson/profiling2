@@ -1,4 +1,4 @@
-import join_data, { JoinData } from "./join_frames";
+import { JoinData, join_data } from "./join_frames";
 import { ScriptEntry, TrackerData } from "./saved_variables";
 
 export type LeafNode = {
@@ -110,9 +110,15 @@ export function punch(roots: Roots, script: ScriptEntry): TreeNode | undefined {
   ];
 }
 
-export function buildScriptTree(scripts: ScriptEntry[]): Roots {
+export function buildScriptTree(
+  scripts: ScriptEntry[],
+  force_dependent: (key: ScriptEntry["subject"]) => boolean = () => false
+): Roots {
   const roots: Roots = {};
   for (const entry of scripts) {
+    if (entry.dependent === undefined && force_dependent?.(entry.subject)) {
+      entry.dependent = true;
+    }
     punchMut(roots, entry);
   }
 

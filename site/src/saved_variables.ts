@@ -1,10 +1,5 @@
-import { SafeParseReturnType, z } from "zod";
-import * as lua from "lua-json";
+import { z } from "zod";
 import * as parser from "../wasm/pkg/profiling2_wasm";
-
-const strToJson = (data: string) => lua.parse(data.replace("Profiling2_Storage =", "return"));
-
-const luaString = z.string().transform(strToJson);
 
 const bossEncounter = z.object({
   encounterName: z.string(),
@@ -45,6 +40,7 @@ const trackerData = z.object({
       )
       .optional(),
   }),
+  dependent: z.boolean().optional(),
   calls: z.number(),
   commits: z.number(),
   officialTime: z.number().optional(),

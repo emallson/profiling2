@@ -136,7 +136,7 @@ describe("joined_samples", () => {
 
   it("should store the sum samples on the branches of the tree to avoid recomputation", () => {
     const roots = buildScriptTree([slab_one_hp, slab_one_cast] as ScriptEntry[]);
-    const spy = vi.spyOn(join, "default");
+    const spy = vi.spyOn(join, "join_data");
 
     const samples = joined_samples(roots["Slab"]);
     const samples2 = joined_samples(roots["Slab"]);

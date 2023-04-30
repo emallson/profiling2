@@ -200,6 +200,14 @@ const NodeContainer = styled("div", {
   },
 });
 
+const HorizontalDl = styled("dl", {
+  base: {
+    display: "grid",
+    gridTemplateColumns: "auto auto",
+    alignContent: "start",
+  },
+});
+
 export function NodeSummary(props: { node: TreeNode; rootMode?: boolean }) {
   const [selectedChild, selectChild] = createSignal<TreeNode | undefined>();
 
@@ -244,6 +252,7 @@ export function NodeSummary(props: { node: TreeNode; rootMode?: boolean }) {
       ],
       marginLeft: 10,
       marginRight: 10,
+      height: 125,
       // width: 200,
     };
   });
@@ -263,7 +272,7 @@ export function NodeSummary(props: { node: TreeNode; rootMode?: boolean }) {
             <Title>{props.node.key}</Title>
           </header>
           <ChildContainer>
-            <dl>
+            <HorizontalDl>
               <dt>Max Obs. Time</dt>
               <dd>{maxObservedTime(props.node).toFixed(3)}</dd>
               <dt>Script Calls</dt>
@@ -278,7 +287,32 @@ export function NodeSummary(props: { node: TreeNode; rootMode?: boolean }) {
                 {!isIntermediateNode(props.node) || props.rootMode ? "" : "≥"}
                 {leastCommits(props.node)}
               </dd>
-            </dl>
+              <Show when={!isIntermediateNode(props.node) && props.node}>
+                {(node) => (
+                  <>
+                    <dt>Script Dependency</dt>
+                    <Show
+                      when={node().self.dependent}
+                      fallback={
+                        <dd
+                          class={described}
+                          title="This script is assumed to trigger independently of other script. Aggregate runtimes use a weighted sum to account for the possibility of multiple scripts running in the same render cycle."
+                        >
+                          Independent
+                        </dd>
+                      }
+                    >
+                      <dd
+                        class={described}
+                        title="This script is assumed to trigger dependently as part of another script's run. Aggregate runtimes may include its samples directly, but will not sum them."
+                      >
+                        Dependent
+                      </dd>
+                    </Show>
+                  </>
+                )}
+              </Show>
+            </HorizontalDl>
             <Show when={histogram()} fallback={<div />}>
               {(plot) => <Chart plot={plot()} />}
             </Show>
@@ -346,7 +380,10 @@ export function RootSummary() {
     const scripts = Array.from((rec.data.scripts as Map<string, TrackerData>).entries());
     const externals = Array.from((rec.data.externals as Map<string, TrackerData>).entries());
     const scriptRoots = buildScriptTree(scripts.map(fromScriptEntry));
-    const externalRoots = buildScriptTree(externals.map(fromScriptEntry));
+    const externalRoots = buildScriptTree(
+      externals.map(fromScriptEntry),
+      (subject) => subject.addonName === "Plater" && subject.frameName === "Core"
+    );
 
     const roots = {
       "Frame Scripts": {
@@ -358,6 +395,12 @@ export function RootSummary() {
         children: externalRoots,
       },
     };
+
+    for (const branch of Object.values(roots)) {
+      for (const child of Object.values(branch.children)) {
+        child.parent = branch;
+      }
+    }
 
     return {
       key: encounterName(rec.encounter),

@@ -29,17 +29,21 @@ local function tableBaseKey(key, table)
   return '@' .. addonName .. '/Tables/' .. key
 end
 
+local function trackedFunction(internalKey, fn, dependent)
+  local tracker = ns.tracker.getScriptTracker(dependent)
+  local wrapped = ns.core.buildWrapper(tracker, fn)
+  ns.core.registerExternalFunction(internalKey, wrapped, tracker)
+  return wrapped
+end
+
 ---Generate a tracked version of the function which records profiling data when called.
 ---Any calls to the original function WILL NOT be tracked.
 ---@param key string A unique name for the function being profiled.
 ---@param fn function
 ---@return function
 function externalNs.trackedFunction(key, fn)
-  local tracker = ns.tracker.getScriptTracker()
   local internalKey = functionKey(key, fn)
-  local wrapped = ns.core.buildWrapper(tracker, fn)
-  ns.core.registerExternalFunction(internalKey, wrapped, tracker)
-  return wrapped
+  return trackedFunction(internalKey, fn, ns.tracker.DependentType.Dependent)
 end
 
 ---Convenience function for tracking method(s) on a table. This replaces the method(s) on the table with
@@ -55,7 +59,7 @@ end
 function externalNs.trackMethods(table, tableKey, methodNames)
   local baseKey = tableBaseKey(tableKey, table)
   for _, methodName in ipairs(methodNames) do
-    table[methodName] = externalNs.trackedFunction(baseKey .. ':' .. methodName, table[methodName])
+    table[methodName] = trackedFunction(baseKey .. ':' .. methodName, table[methodName], ns.tracker.DependentType.Dependent)
   end
   return table
 end

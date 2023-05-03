@@ -1,4 +1,4 @@
-## Interface: 10000
+## Interface: 100100
 ## Title: !Profiling2
 ## Version: @project-version@
 ## SavedVariables: Profiling2_Storage

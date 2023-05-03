@@ -230,7 +230,6 @@ local function buildInternalUsageTable(trackedMap)
   for key, value in pairs(trackedMap) do
     if value.tracker:shouldExport() then
       scripts[key] = value.tracker:export()
-      scripts[key].officialTime = GetFunctionCPUUsage(value.fn, true)
     end
   end
 

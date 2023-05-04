@@ -88,8 +88,8 @@ local function injectPlater()
 
     local function wrappedLoadString(baseKey)
       return function(text, chunkname)
-        local result, err = loadstring(text, chunkname)
-        if result ~= nil then
+        local outer, err = loadstring(text, chunkname)
+        if outer ~= nil then
           --- find the tracker to use. re-use the tracker in case of recompilation (shouldn't happen
           --mid-combat, but...)
           if trackers[chunkname] == nil then
@@ -97,14 +97,20 @@ local function injectPlater()
           end
           local tracker = trackers[chunkname]
 
+          local result = outer()
+
           local wrapper = ns.core.buildWrapper(tracker, result)
           local scriptType, scriptName = parseChunkName(chunkname)
           scriptName = LibDeflate:EncodeForPrint(LibDeflate:CompressDeflate(scriptName))
           local key = baseKey .. '/dec:' .. scriptName .. ':' .. scriptType
           ns.core.registerExternalFunction(key, wrapper, tracker)
-          return wrapper, err
+
+          local function rewrapped()
+            return wrapper
+          end
+          return rewrapped, err
         else
-          return result, err
+          return outer, err
         end
       end
     end

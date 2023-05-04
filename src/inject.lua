@@ -30,10 +30,12 @@ local function injectWA()
       local wrapped
       local outer = function(...)
         if not registrationComplete then
+          local env = getfenv(fn).aura_env
+          local id = env and env.id or 'Unknown'
+
           -- this guards against repeat LoadFunction calls
           -- we also don't necessarily have aura_env.id yet when the LoadFunction call runs
-          local env = getfenv(fn).aura_env
-          local path = '@WeakAuras/Auras/' .. env.id .. '/dec:' .. triggerKey .. ':CustomFn'
+          local path = '@WeakAuras/Auras/' .. id .. '/dec:' .. triggerKey .. ':CustomFn'
 
           if trackers[path] == nil then
             trackers[path] = ns.tracker.getScriptTracker()

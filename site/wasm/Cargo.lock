@@ -593,6 +593,7 @@ dependencies = [
  "ouroboros",
  "pretty_assertions",
  "serde",
+ "serde-savedvariables",
  "serde-wasm-bindgen",
  "thiserror",
  "wasm-bindgen",
@@ -679,6 +680,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bb2f3770c8bce3bcda7e149193a069a0f4365bda1fa5cd88e03bca26afc1216c"
 dependencies = [
  "serde_derive",
+]
+
+[[package]]
+name = "serde-savedvariables"
+version = "0.1.0"
+dependencies = [
+ "map-macro",
+ "nom",
+ "pretty_assertions",
+ "serde",
+ "thiserror",
 ]
 
 [[package]]

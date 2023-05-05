@@ -1,3 +1,4 @@
+/// Support for decoding/decompressing data that has been compressed with LibDeflate in World of Warcraft.
 use std::io::prelude::*;
 
 use flate2::write::DeflateDecoder;
@@ -35,7 +36,7 @@ pub enum DecompressionError {
 /// Port of LibDeflate:DecodeForPrint
 ///
 /// Outputs a vector of bytes.
-pub(super) fn decode_for_print(input: &str) -> Result<Vec<u8>, DecompressionError> {
+pub fn decode_for_print(input: &str) -> Result<Vec<u8>, DecompressionError> {
     let mut result = Vec::new();
     let bytes = input.as_bytes();
     let major_len = (bytes.len() / 4) * 4;

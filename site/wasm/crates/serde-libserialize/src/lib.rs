@@ -1,4 +1,16 @@
-use std::{borrow::Cow, cell::RefCell, collections::HashMap, fmt::Debug, ops::RangeFrom, rc::Rc};
+/// Support for decoding data serialized with LibSerialize in World of Warcraft.
+///
+/// Saved, serialized data is not UTF-8 (or ASCII) safe, and so it is typically compressed & encoded
+/// with LibDeflate. Support for decoding this is enabled by the `libdeflate` feature, which is
+/// enabled by default.
+use std::{
+    borrow::Cow,
+    cell::RefCell,
+    collections::HashMap,
+    fmt::{Debug, Display},
+    ops::RangeFrom,
+    rc::Rc,
+};
 
 use bitvec::{macros::internal::funty::Integral, prelude::*};
 
@@ -15,7 +27,10 @@ use nom::{
 use num_derive::FromPrimitive;
 use num_traits::cast::FromPrimitive;
 
-use super::{Table, Value};
+use serde_savedvariables::{Table, Value};
+
+#[cfg(feature = "libdeflate")]
+pub mod deflate;
 
 const DESERIALIZATION_VERSION: u8 = 2;
 
@@ -456,15 +471,6 @@ fn float_str(count: u8) -> impl FnMut(ParserState) -> IResult<f64> {
     }
 }
 
-fn trace<'a, O: Debug>(
-    mut inner: impl FnMut(ParserState<'a>) -> IResult<'a, O>,
-) -> impl FnMut(ParserState<'a>) -> IResult<'a, O> {
-    move |input| {
-        let (rest, res) = inner(input)?;
-        Ok((rest, res))
-    }
-}
-
 // We deal with a lot of float arrays. This fast path helps improve parsing performance of them.
 fn deserialize_float(input: ParserState) -> IResult<f64> {
     let (rest, header) = large_object_header(input.clone())?;
@@ -546,6 +552,13 @@ pub enum DeserializationError {
     StrFloatError(#[from] std::num::ParseFloatError),
     #[error("Reference to missing table or string (key: {0})")]
     MissingRef(usize),
+    #[error("Failed to parse serialized data. {0}")]
+    GenericParseError(SerializeParseError),
+    #[error("Failed to deserialize from SavedVariables format.")]
+    SavedVariablesError(#[from] serde_savedvariables::ParseError),
+    #[cfg(feature = "libdeflate")]
+    #[error("Unable to decompress data. {0}")]
+    DecompressionError(#[from] deflate::DecompressionError),
 }
 
 #[derive(Debug)]
@@ -553,7 +566,16 @@ pub struct SerializeParseError {
     repr: Vec<String>,
 }
 
-pub fn deserialize<'a: 'b, 'b>(input: &'a [u8]) -> Result<Value<'b>, SerializeParseError> {
+impl Display for SerializeParseError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for msg in &self.repr {
+            f.write_str(msg)?;
+        }
+        Ok(())
+    }
+}
+
+fn deserialize<'a: 'b, 'b>(input: &'a [u8]) -> Result<Value<'b>, SerializeParseError> {
     let state = ParserState::new(input);
     match deserialize_internal(state) {
         Err(err) => match err {
@@ -574,15 +596,42 @@ pub fn deserialize<'a: 'b, 'b>(input: &'a [u8]) -> Result<Value<'b>, SerializePa
     }
 }
 
+/// Deserialize data from a LibDeflate string encoded with EncodeForPrint.
+#[cfg(feature = "libdeflate")]
+pub fn from_str<'de, T: serde::de::Deserialize<'de>>(
+    input: &str,
+) -> Result<T, DeserializationError> {
+    let decompressed = deflate::decompress(input)?;
+
+    from_bytes(&decompressed)
+}
+
+/// Deserialize data from a raw byte array. Note that the strings produced by LibSerialize are NOT
+/// valid UTF-8 in general and are not guaranteed to be output correctly by the code in WoW that
+/// dumps SavedVariables.
+///
+/// It is strongly encouraged to encode your data after serialization. This method exists to support
+/// use cases that do not use LibDeflate to handle the encoding.
+pub fn from_bytes<'de, T: serde::de::Deserialize<'de>>(
+    input: &[u8],
+) -> Result<T, DeserializationError> {
+    use serde::de::IntoDeserializer;
+
+    let deserializer = deserialize(input)
+        .map_err(DeserializationError::GenericParseError)?
+        .into_deserializer();
+
+    Ok(T::deserialize(deserializer)?)
+}
+
 #[cfg(test)]
 mod test {
-    use map_macro::hash_map;
-    use pretty_assertions::assert_eq;
     use std::borrow::Cow;
 
-    use bitvec::prelude::*;
+    use map_macro::hash_map;
+    use pretty_assertions::assert_eq;
 
-    use crate::parser::{Table, Value};
+    use super::{Table, Value};
 
     #[test]
     fn test_deserialize_int() {

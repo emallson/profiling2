@@ -593,6 +593,7 @@ dependencies = [
  "ouroboros",
  "pretty_assertions",
  "serde",
+ "serde-libserialize",
  "serde-savedvariables",
  "serde-wasm-bindgen",
  "thiserror",
@@ -680,6 +681,22 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bb2f3770c8bce3bcda7e149193a069a0f4365bda1fa5cd88e03bca26afc1216c"
 dependencies = [
  "serde_derive",
+]
+
+[[package]]
+name = "serde-libserialize"
+version = "0.1.0"
+dependencies = [
+ "bitvec",
+ "flate2",
+ "map-macro",
+ "nom",
+ "num-derive",
+ "num-traits",
+ "pretty_assertions",
+ "serde",
+ "serde-savedvariables",
+ "thiserror",
 ]
 
 [[package]]

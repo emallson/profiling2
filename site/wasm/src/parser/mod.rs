@@ -3,38 +3,6 @@ use std::{borrow::Cow, collections::HashMap, num::TryFromIntError};
 
 use serde::{Deserialize, Serialize};
 
-use self::{
-    decompress::{decompress, DecompressionError},
-    deserialize::deserialize,
-};
-
-pub(crate) mod decompress;
-mod deserialize;
-
-/// Any (supported) value type.
-#[derive(Debug, PartialEq, Clone)]
-pub enum Value<'a> {
-    Nil,
-    Bool(bool),
-    Int(i64),
-    Float(f64),
-    String(Cow<'a, str>),
-    Table(Table<'a>),
-}
-
-/// Represents a Lua table. We don't support mixing named keys and implicit keys.
-#[derive(Debug, PartialEq, Clone)]
-pub enum Table<'a> {
-    Empty,
-    Named(HashMap<Cow<'a, str>, Value<'a>>),
-    Array(Vec<Value<'a>>),
-    FloatArray(Vec<f64>),
-    MixedTable {
-        array: Vec<Value<'a>>,
-        named: HashMap<Cow<'a, str>, Value<'a>>,
-    },
-}
-
 #[derive(Debug, PartialEq, Deserialize)]
 #[serde(untagged)]
 pub enum RecordingData<'a> {
@@ -110,36 +78,12 @@ pub struct SavedVariables<'a> {
 
 #[derive(thiserror::Error, Debug)]
 pub enum SavedVariablesError {
-    #[error("Unable to parse {name}. Expected {expected}. Found {actual}")]
-    BadType {
-        name: &'static str,
-        expected: &'static str,
-        actual: String,
-    },
-    #[error("Unable to parse {name}. Key {key} missing.")]
-    MissingKey {
-        name: &'static str,
-        key: &'static str,
-    },
-    #[error("Unable to parse {expected}. Invalid primitive {actual}.")]
-    InvalidPrimitive {
-        expected: &'static str,
-        actual: String,
-    },
     #[error("Unable to parse SavedVariables file. {0}")]
     ParseError(#[from] serde_savedvariables::ParseError),
-    #[error("Unable to decompress recording data: {0}")]
-    DecompressionError(#[from] DecompressionError),
     #[error("Unable to parse LibSerialize data: {0:?}")]
-    DeserializeError(deserialize::SerializeParseError),
+    DeserializeError(#[from] serde_libserialize::DeserializationError),
     #[error("Unable to cast number from signed to unsigned. {0}")]
     SignCastError(#[from] TryFromIntError),
-    #[error("Unable to read input data")]
-    Unreadable,
-    #[error("Recording data has not been deserialized yet")]
-    NotDeserialized,
-    #[error("An unrecoverable parse error occurred")]
-    Unknown,
 }
 
 pub fn parse_saved_variables(data: &str) -> Result<SavedVariables<'_>, SavedVariablesError> {
@@ -147,9 +91,7 @@ pub fn parse_saved_variables(data: &str) -> Result<SavedVariables<'_>, SavedVari
 }
 
 pub fn parse_compressed_recording(data: &str) -> Result<ParsedRecording<'_>, SavedVariablesError> {
-    let data = decompress(data).map_err(SavedVariablesError::DecompressionError)?;
-    let data = deserialize(&data).map_err(SavedVariablesError::DeserializeError)?;
-    unimplemented!()
+    Ok(serde_libserialize::from_str(data)?)
 }
 
 #[cfg(test)]
@@ -186,9 +128,11 @@ mod test {
                 ..
             }) => {
                 assert_eq!(data.len(), 9872);
-                let decoded = decompress::decode_for_print(data).expect("to decode successfully");
+                let decoded = serde_libserialize::deflate::decode_for_print(data)
+                    .expect("to decode successfully");
                 assert_eq!(decoded.len(), 7404);
-                let decompressed = decompress(data).expect("to decode + decompress successfully");
+                let decompressed = serde_libserialize::deflate::decompress(data)
+                    .expect("to decode + decompress successfully");
                 assert_eq!(decompressed.len(), 25029);
             }
             _ => assert!(false),
@@ -214,13 +158,13 @@ mod test {
         let mut result = result.unwrap();
         assert_eq!(result.recordings.len(), 6);
 
-        // for recording in &mut result.recordings {
-        //     match &recording.data {
-        //         crate::parser::RecordingData::Unparsed(raw) => {
-        //             parse_compressed_recording(raw).expect("to succeed");
-        //         }
-        //         _ => {}
-        //     }
-        // }
+        for recording in &mut result.recordings {
+            match &recording.data {
+                crate::parser::RecordingData::Unparsed(raw) => {
+                    parse_compressed_recording(raw).expect("to succeed");
+                }
+                _ => {}
+            }
+        }
     }
 }

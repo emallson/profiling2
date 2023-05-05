@@ -126,6 +126,7 @@ pub fn parse_saved_variables(blob: String) -> Result<SavedVariablesRef, JsValue>
 
 #[wasm_bindgen]
 pub fn decompress_string(blob: String) -> Result<String, JsValue> {
-    let decompressed = parser::decompress::decompress(&blob).map_err(|v| format!("{}", v))?;
+    let decompressed =
+        serde_libserialize::deflate::decompress(&blob).map_err(|v| format!("{}", v))?;
     Ok(String::from_utf8(decompressed).map_err(|v| format!("{}", v))?)
 }

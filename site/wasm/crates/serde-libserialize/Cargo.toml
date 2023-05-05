@@ -11,7 +11,15 @@ nom = "7.1.3"
 num-derive = "0.3.3"
 num-traits = "0.2.15"
 serde = { version = "1.0.160", features = ["alloc"]}
+serde-savedvariables = { path = "../serde-savedvariables" }
 thiserror = "1.0.40"
+flate2 = { version = "1.0.25", optional = true }
 
 [dev-dependencies]
-serde = { version = "1.0.160", features = ["alloc", "derive"]}
+pretty_assertions = "1.3.0"
+map-macro = "0.2.6"
+serde = {version = "1.0.160", features=["alloc", "derive"]}
+
+[features]
+default = ["libdeflate"]
+libdeflate = ["flate2"]

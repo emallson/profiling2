@@ -35,6 +35,7 @@ pub enum Encounter<'a> {
         difficultyId: u64,
         groupSize: u64,
     },
+    #[serde(rename = "mythicplus")]
     Dungeon {
         startTime: u64,
         endTime: u64,

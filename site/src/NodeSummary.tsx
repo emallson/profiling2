@@ -378,23 +378,28 @@ export function RootSummary() {
     }
 
     const scripts = Array.from((rec.data.scripts as Map<string, TrackerData>).entries());
-    const externals = Array.from((rec.data.externals as Map<string, TrackerData>).entries());
+    const externals = Array.from(
+      ((rec.data.externals ?? new Map()) as Map<string, TrackerData>).entries()
+    );
     const scriptRoots = buildScriptTree(scripts.map(fromScriptEntry));
     const externalRoots = buildScriptTree(
       externals.map(fromScriptEntry),
       (subject) => subject.addonName === "Plater" && subject.frameName === "Core"
     );
 
-    const roots = {
+    const roots: Record<string, IntermediateNode> = {
       "Frame Scripts": {
         key: "Frame Scripts",
         children: scriptRoots,
       },
-      "External Functions": {
+    };
+
+    if (externals.length > 0) {
+      roots["External Functions"] = {
         key: "External Functions",
         children: externalRoots,
-      },
-    };
+      };
+    }
 
     for (const branch of Object.values(roots)) {
       for (const child of Object.values(branch.children)) {

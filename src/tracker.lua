@@ -47,12 +47,9 @@ local function trackingEnabled()
 end
 
 ---@class ScriptTracker
----@field public heap TinyMinHeap
----@field public moments MomentEstimator
----@field public quantiles QuantileEstimator
+---@field private sketch Sketch
 ---@field public total_time number
 ---@field public commits number The number of frame values committed. Should be equal to the number of frames in which the tracked method was called.
----@field public reservoir ReservoirSampler
 ---@field private frame_time number The amount of time spent in the most recent frame
 ---@field private frame_calls number The amount of time it has been called this frame
 ---@field private lastIndex number The index of the last seen frame
@@ -64,10 +61,7 @@ function trackerBase:shouldCommit()
 end
 
 function trackerBase:commit()
-  self.moments:update(self.frame_time)
-  self.heap:push(self.frame_time)
-  self.quantiles:update(self.frame_time)
-  self.reservoir:update(self.frame_time)
+  self.sketch:push(self.frame_time)
   self.total_time = self.total_time + self.frame_time
   self.total_calls = self.total_calls + self.frame_calls
   self.commits = self.commits + 1
@@ -103,25 +97,12 @@ function trackerBase:export()
   if self:shouldCommit() then
     self:commit()
   end
-  local stats = {
-    mean = self.moments:mean(),
-    quantiles = self.quantiles:quantiles(),
-    samples = self.reservoir:samples(),
-  }
-
-  if self.moments:sample_count() >= 2 then
-    stats.variance = self.moments:variance()
-  end
-  if self.moments:sample_count() >= 3 then
-    stats.skew = self.moments:skewness()
-  end
 
   return {
     commits = self.commits,
     calls = self.total_calls,
     total_time = self.total_time,
-    stats = stats,
-    top5 = self.heap:contents(),
+    sketch = self.sketch:export(),
     dependent = self.dependent or false
   }
 end
@@ -133,10 +114,7 @@ function trackerBase:reset()
   self.total_calls = 0
   self.frame_calls = 0
   self.lastIndex = frameIndex
-  self.moments:reset()
-  self.quantiles:reset()
-  self.reservoir:reset()
-  self.heap:clear()
+  self.sketch:reset()
 end
 
 local trackerMeta = {
@@ -147,10 +125,7 @@ local trackers = {}
 
 local function buildTracker()
   local tracker = {
-    heap = ns.heap.new(5),
-    moments = ns.moment_estimator.new(),
-    quantiles = ns.quantile.new(),
-    reservoir = ns.reservoir.new(200),
+    sketch = ns.sketch.new(),
     total_time = 0,
     total_calls = 0,
     frame_time = 0,

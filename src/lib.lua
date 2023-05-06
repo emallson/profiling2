@@ -1,10 +1,8 @@
 ---@class ProfilingNs
 ---@field public heap HeapNs
----@field public moment_estimator MomentEstimatorNs
----@field public quantile QuantileNs
----@field public reservoir ReservoirNs
 ---@field public tracker TrackerNs
 ---@field public external Profiling2
+---@field public sketch SketchNs
 local ns = select(2, ...)
 
 ---@type string

@@ -20,6 +20,7 @@ local function newHeap(size)
   return result
 end
 
+---Get a *copy* of the contents.
 function tinyMinHeap:contents()
   local result = {}
   for i = 1,#self.values do

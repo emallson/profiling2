@@ -1,5 +1,5 @@
 import { JoinData, join_data } from "./join_frames";
-import { ScriptEntry, TrackerData } from "./saved_variables";
+import { ScriptEntry, TrackerData, isOldTrackerData } from "./saved_variables";
 
 export type LeafNode = {
   // we may not have any data for an intermediate node
@@ -141,11 +141,11 @@ export function leaves(node: TreeNode): TrackerData[] {
 }
 
 export function joined_samples(node: TreeNode): number[] | undefined {
-  if (isDataNode(node)) {
+  if (isDataNode(node) && isOldTrackerData(node.self)) {
     return node.self.stats.samples;
   } else if (isIntermediateNode(node)) {
     if (!node.joined_samples) {
-      const scripts = leaves(node);
+      const scripts = leaves(node).filter(isOldTrackerData);
       if (scripts.some((script) => !script.stats.samples)) {
         return undefined; // don't attempt to do a partial join
       }
@@ -153,7 +153,7 @@ export function joined_samples(node: TreeNode): number[] | undefined {
       if (scripts.length === 1) {
         // only one child, use its samples directly
         node.joined_samples = scripts[0].stats.samples;
-      } else {
+      } else if (scripts.length > 0) {
         node.joined_samples = join_data(scripts as JoinData);
       }
     }

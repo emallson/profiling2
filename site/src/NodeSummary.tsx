@@ -11,7 +11,13 @@ import {
 } from "./frame_tree";
 import { encounterName, useSelectedRecording } from "./EncounterSelector";
 import { createMemo, createSignal, ErrorBoundary, For, Show } from "solid-js";
-import { TrackerData, fromScriptEntry } from "./saved_variables";
+import {
+  NewTrackerData,
+  TRIVIAL_TIME,
+  TrackerData,
+  fromScriptEntry,
+  isOldTrackerData,
+} from "./saved_variables";
 import { style } from "@macaron-css/core";
 import Chart from "./Chart";
 import DisplayError from "./DisplayError";
@@ -29,16 +35,27 @@ const Title = styled("span", {
   },
 });
 
+/**
+ * If the new data doesn't have any non-trivial data, return the trivial value by itself.
+ */
+function outlierData(data: NewTrackerData): number[] {
+  if (data.sketch.outliers.length === 0) {
+    return [TRIVIAL_TIME];
+  } else {
+    return data.sketch.outliers;
+  }
+}
+
 function maxObservedTime(node: TreeNode): number {
   return Math.max.apply(
     null,
-    leaves(node).flatMap((leaf) => leaf.top5)
+    leaves(node).flatMap((leaf) => (isOldTrackerData(leaf) ? leaf.top5 : outlierData(leaf)))
   );
 }
 
 function topN(node: TreeNode, n = 10, cutoff = 1): number[] {
   return leaves(node)
-    .flatMap((leaf) => leaf.top5)
+    .flatMap((leaf) => (isOldTrackerData(leaf) ? leaf.top5 : outlierData(leaf)))
     .sort((a, b) => a - b)
     .slice(-n)
     .filter((x) => x >= cutoff);
@@ -349,24 +366,29 @@ const RootContainer = styled("div", {
 // onUpdate's elapsed field is seconds, not ms
 const OUD_SCALE = 1000;
 function scaledUpdateDelay(data: TrackerData): TrackerData {
-  return {
-    top5: data.top5.map((x) => x * OUD_SCALE),
-    total_time: data.total_time * OUD_SCALE,
-    stats: {
-      mean: data.stats.mean * OUD_SCALE,
-      variance: data.stats.variance ? data.stats.variance * Math.pow(OUD_SCALE, 2) : undefined,
-      // not even trying
-      skew: undefined,
-      samples: data.stats.samples?.map((sample) => sample * OUD_SCALE),
-      quantiles: data.stats.quantiles
-        ? Object.fromEntries(
-            Object.entries(data.stats.quantiles).map(([k, v]) => [k, v * OUD_SCALE])
-          )
-        : undefined,
-    },
-    calls: data.calls,
-    commits: data.commits,
-  };
+  if (isOldTrackerData(data)) {
+    return {
+      top5: data.top5.map((x) => x * OUD_SCALE),
+      total_time: data.total_time * OUD_SCALE,
+      stats: {
+        mean: data.stats.mean * OUD_SCALE,
+        variance: data.stats.variance ? data.stats.variance * Math.pow(OUD_SCALE, 2) : undefined,
+        // not even trying
+        skew: undefined,
+        samples: data.stats.samples?.map((sample) => sample * OUD_SCALE),
+        quantiles: data.stats.quantiles
+          ? Object.fromEntries(
+              Object.entries(data.stats.quantiles).map(([k, v]) => [k, v * OUD_SCALE])
+            )
+          : undefined,
+      },
+      calls: data.calls,
+      commits: data.commits,
+    };
+  } else {
+    // new trackers are pre-scaled so that they work with the new system
+    return data;
+  }
 }
 
 export function RootSummary() {
@@ -377,10 +399,8 @@ export function RootSummary() {
       return undefined;
     }
 
-    const scripts = Array.from((rec.data.scripts as Map<string, TrackerData>).entries());
-    const externals = Array.from(
-      ((rec.data.externals ?? new Map()) as Map<string, TrackerData>).entries()
-    );
+    const scripts = Object.entries(rec.data.scripts);
+    const externals = (rec.data.externals && Object.entries(rec.data.externals)) ?? [];
     const scriptRoots = buildScriptTree(scripts.map(fromScriptEntry));
     const externalRoots = buildScriptTree(
       externals.map(fromScriptEntry),

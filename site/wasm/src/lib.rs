@@ -3,12 +3,12 @@ use std::{cell::RefCell, rc::Rc};
 use ouroboros::self_referencing;
 use parser::{ParsedRecording, Recording, SavedVariablesError};
 
+use serde::Serialize;
 use wasm_bindgen::{prelude::wasm_bindgen, JsValue};
 
 use crate::parser::RecordingData;
 
 mod parser;
-mod sampler;
 
 #[self_referencing]
 struct SavedVariablesRefInner {
@@ -23,7 +23,7 @@ pub struct SavedVariablesRef {
     inner: Rc<SavedVariablesRefInner>,
 }
 
-#[wasm_bindgen]
+#[wasm_bindgen(skip_typescript)]
 #[self_referencing]
 pub struct RecordingRef {
     source: Rc<SavedVariablesRefInner>,
@@ -69,23 +69,36 @@ impl RecordingRef {
             }
         }
     }
+
+    fn serializer() -> serde_wasm_bindgen::Serializer {
+        let serializer = serde_wasm_bindgen::Serializer::new();
+        serializer.serialize_maps_as_objects(true)
+    }
 }
+
+#[wasm_bindgen(typescript_custom_section)]
+const TS_APPEND_CONTENT: &'static str = r#"
+export type RecordingRef = import("./parsed_recording").Recording;
+"#;
 
 #[wasm_bindgen]
 impl RecordingRef {
-    #[wasm_bindgen(getter)]
+    #[wasm_bindgen(getter, skip_typescript)]
     pub fn encounter(&self) -> JsValue {
         serde_wasm_bindgen::to_value(&self.borrow_data().encounter)
             .expect("serialization to always succeed")
     }
 
-    #[wasm_bindgen(getter)]
+    #[wasm_bindgen(getter, skip_typescript)]
     pub fn data(&self) -> Result<JsValue, String> {
         let data = self.borrow_data();
 
         match data.data {
             RecordingData::Parsed(ref data) => {
-                serde_wasm_bindgen::to_value(data).map_err(|e| e.to_string())
+                let value = data
+                    .serialize(&RecordingRef::serializer())
+                    .map_err(|e| e.to_string())?;
+                Ok(value)
             }
             RecordingData::Unparsed(ref raw) => {
                 if self.borrow_cached_data().borrow().is_some() {
@@ -93,7 +106,9 @@ impl RecordingRef {
                 } else {
                     let data =
                         parser::parse_compressed_recording(raw).map_err(|e| e.to_string())?;
-                    let value = serde_wasm_bindgen::to_value(&data).map_err(|e| e.to_string())?;
+                    let value = data
+                        .serialize(&RecordingRef::serializer())
+                        .map_err(|e| e.to_string())?;
                     *(self.borrow_cached_data().borrow_mut()) = Some(value.clone());
                     Ok(value)
                 }

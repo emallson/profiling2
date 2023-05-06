@@ -61,7 +61,7 @@ end
 ---@field private count number
 ---@field private trivial_count number
 ---@field private bins table<number>|nil
----@field private outliers TinyMinHeap
+---@field private outliers TinyMinHeap Maybe not actual outliers, but the top k.
 local sketchBase = {
   ---The cutoff for trivial values.
   T = T,
@@ -79,7 +79,7 @@ local function new(newHeap)
     count = 0,
     trivial_count = 0,
     bins = nil,
-    outliers = (newHeap or ns.heap.new)(k),
+    outliers = (newHeap or ns.heap.new)(k)
   }
   setmetatable(result, meta)
 

@@ -8,9 +8,7 @@ libs\LibDeflate\LibDeflate.lua
 libs\LibSerialize\LibSerialize.lua
 
 src\heap.lua
-src\moments.lua
-src\quantiles.lua
-src\reservoir.lua
+src\sketch.lua
 src\tracker.lua
 src\external.lua
 src\lib.lua

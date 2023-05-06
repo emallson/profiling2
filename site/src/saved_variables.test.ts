@@ -19,7 +19,7 @@ describe("saved variables parser", () => {
           "startTime": 1682193529,
         }
       `);
-      expect(recording.data.scripts.size).toMatchInlineSnapshot("24");
+      expect(Object.keys(recording.data.scripts).length).toMatchInlineSnapshot("24");
     }
   });
 });

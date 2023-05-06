@@ -1,81 +1,9 @@
 /// Rather than embed a whole lua parser (of which we need very little), use a basic nom parser for the saved variables table
-use std::{borrow::Cow, collections::HashMap, num::TryFromIntError};
+use std::num::TryFromIntError;
 
-use serde::{Deserialize, Serialize};
+pub mod types;
 
-#[derive(Debug, PartialEq, Deserialize)]
-#[serde(untagged)]
-pub enum RecordingData<'a> {
-    Unparsed(Cow<'a, str>),
-    Parsed(ParsedRecording<'a>),
-}
-
-#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
-#[allow(non_snake_case)]
-pub struct ParsedRecording<'a> {
-    pub scripts: HashMap<Cow<'a, str>, TrackerData>,
-    pub externals: Option<HashMap<Cow<'a, str>, TrackerData>>,
-    pub onUpdateDelay: TrackerData,
-}
-
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
-#[allow(non_snake_case)]
-#[serde(tag = "kind", rename_all = "lowercase")]
-pub enum Encounter<'a> {
-    Manual {
-        startTime: u64,
-        endTime: u64,
-    },
-    Raid {
-        startTime: u64,
-        endTime: u64,
-        encounterName: Cow<'a, str>,
-        encounterId: u64,
-        success: bool,
-        difficultyId: u64,
-        groupSize: u64,
-    },
-    #[serde(rename = "mythicplus")]
-    Dungeon {
-        startTime: u64,
-        endTime: u64,
-        success: bool,
-        mapId: u64,
-        groupSize: u64,
-    },
-}
-
-#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
-#[allow(non_snake_case)]
-pub struct TrackerData {
-    pub stats: Stats,
-    pub calls: u64,
-    pub commits: u64,
-    pub officialTime: Option<f64>,
-    pub dependent: Option<bool>,
-    pub total_time: f64,
-    pub top5: Vec<f64>,
-}
-
-#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
-pub struct Stats {
-    pub mean: f64,
-    pub variance: Option<f64>,
-    pub skew: Option<f64>,
-    pub samples: Vec<f64>,
-    pub quantiles: Option<HashMap<String, f64>>,
-}
-
-#[derive(Debug, PartialEq, Deserialize)]
-pub struct Recording<'a> {
-    pub(crate) encounter: Encounter<'a>,
-    pub(crate) data: RecordingData<'a>,
-}
-
-#[derive(Debug, PartialEq, Deserialize)]
-pub struct SavedVariables<'a> {
-    pub(crate) recordings: Vec<Recording<'a>>,
-}
+pub use types::*;
 
 #[derive(thiserror::Error, Debug)]
 pub enum SavedVariablesError {

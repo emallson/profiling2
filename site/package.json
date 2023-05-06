@@ -7,6 +7,7 @@
     "start": "vite",
     "build": "vite build",
     "test": "vitest",
+    "schema-types": "json2ts -i wasm/pkg/schema.json -o wasm/pkg/parsed_recording.d.ts",
     "typecheck": "tsc --noEmit -p ."
   },
   "keywords": [],
@@ -37,6 +38,7 @@
     "eslint-plugin-solid": "^0.12.1",
     "fast-check": "^3.8.0",
     "jsdom": "^21.1.1",
+    "json-schema-to-typescript": "^13.0.1",
     "prettier": "^2.8.7",
     "typescript": "^5.0.4",
     "vite": "^4.2.1",

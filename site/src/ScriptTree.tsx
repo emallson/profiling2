@@ -14,6 +14,7 @@ import { createVar, fallbackVar } from "@macaron-css/core";
 import { assignInlineVars } from "@vanilla-extract/dynamic";
 import * as Plot from "@observablehq/plot";
 import * as format from "d3-format";
+import { fromScriptEntry } from "./saved_variables";
 
 function weight(node: TreeNode): number {
   const samples = joined_samples(node);
@@ -170,7 +171,7 @@ export default function ScriptTree() {
       return undefined;
     }
 
-    return buildScriptTree(scripts);
+    return buildScriptTree(Object.entries(scripts).map(fromScriptEntry));
   });
 
   const [node, setNode] = createSignal<TreeNode | undefined>(undefined);

@@ -1,7 +1,7 @@
-import { ScriptEntry } from "./saved_variables";
+import { OldTrackerData, ScriptEntry } from "./saved_variables";
 
 export type JoinDatum = {
-  stats: Required<Pick<ScriptEntry["stats"], "samples">>;
+  stats: Required<Pick<OldTrackerData["stats"], "samples">>;
   commits: ScriptEntry["commits"];
   dependent?: ScriptEntry["dependent"];
 };

@@ -55,7 +55,22 @@ export function fromScriptEntry([key, data]: [string, recording.TrackerData]): S
   };
 }
 
-export const TRIVIAL_TIME = 0.5066;
+export const ALPHA = 0.01;
+export const GAMMA = (1 + ALPHA) / (1 - ALPHA);
+export const BIN_OFFSET = -34;
+export const TRIVIAL_TIME = Math.pow(GAMMA, BIN_OFFSET);
+
+export function bin_index_to_left_edge(ix: number): number {
+  return Math.pow(GAMMA, ix + BIN_OFFSET);
+}
+
+/**
+ * Inverse of `bin_index_to_left_edge` with some thresholding.
+ */
+export function bin_index_for(value: number): number {
+  // the subtraction here deals with a shitty FP issue
+  return Math.ceil(Math.log(value - 1e-12) / Math.log(GAMMA)) - BIN_OFFSET;
+}
 
 export type ParseResult =
   | {

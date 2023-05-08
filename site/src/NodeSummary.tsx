@@ -6,16 +6,21 @@ import {
   TreeNode,
   buildScriptTree,
   isIntermediateNode,
+  joined_hists,
   joined_samples,
   leaves,
 } from "./frame_tree";
 import { encounterName, useSelectedRecording } from "./EncounterSelector";
 import { createMemo, createSignal, ErrorBoundary, For, Show } from "solid-js";
 import {
+  BIN_OFFSET,
+  GAMMA,
   NewTrackerData,
   TRIVIAL_TIME,
   TrackerData,
+  bin_index_to_left_edge,
   fromScriptEntry,
+  isNewTrackerData,
   isOldTrackerData,
 } from "./saved_variables";
 import { style } from "@macaron-css/core";
@@ -136,6 +141,43 @@ const ChildLabel = styled("span", {
   },
 });
 
+const heatBins = (child: TreeNode, domainEnd: number): Plot.Rect => {
+  const data = leaves(child);
+  if (isOldTrackerData(data[0])) {
+    const binWidth = domainEnd / BIN_COUNT;
+    const samples = joined_samples(child) ?? [];
+    return Plot.rect(samples, {
+      ...Plot.binX(
+        { fillOpacity: "proportion" },
+        {
+          x: { value: (d) => d, interval: binWidth },
+        }
+      ),
+      strokeOpacity: 0.25,
+      fill: "black",
+      stroke: "black",
+      title(d) {
+        const left = binWidth * Math.floor(d[0] / binWidth);
+        return `${left.toFixed(1)} - ${(left + binWidth).toFixed(1)}ms ―  ${d.length} samples (${(
+          (100 * d.length) /
+          samples.length
+        ).toFixed(1)}%)`;
+      },
+    });
+  } else {
+    return Plot.rect(joined_hists(child), {
+      opacity: "height",
+      x1: "left",
+      x2: "right",
+      title(d) {
+        return `${d.left.toFixed(1)} - ${d.right.toFixed(1)}ms ― ${(d.height * 100).toFixed(
+          1
+        )}% of samples`;
+      },
+    });
+  }
+};
+
 export function ChildSummary(props: {
   child: TreeNode;
   onClick: () => void;
@@ -143,42 +185,22 @@ export function ChildSummary(props: {
   domainEnd: number;
 }) {
   const plot = createMemo<Plot.PlotOptions>(() => {
-    const samples = joined_samples(props.child) ?? [];
     const outliers = topN(props.child);
-
-    const width = props.domainEnd;
-    const binWidth = width / BIN_COUNT;
 
     const result: Plot.PlotOptions = {
       x: {
         zero: true,
         axis: null,
-        domain: [0, width],
+        domain: [0, props.domainEnd],
       },
       marginLeft: 10,
       marginRight: 10,
       opacity: {
-        domain: [0, 1 / 0.75],
+        domain: [0, 1],
       },
       marks: [
-        dangerZoneMark(width),
-        Plot.rect(samples, {
-          ...Plot.binX(
-            { fillOpacity: "proportion" },
-            {
-              x: { value: (d) => d, interval: binWidth },
-            }
-          ),
-          strokeOpacity: 0.25,
-          fill: "black",
-          stroke: "black",
-          title(d) {
-            const left = binWidth * Math.floor(d[0] / binWidth);
-            return `${left.toFixed(1)} - ${(left + binWidth).toFixed(1)}ms ―  ${
-              d.length
-            } samples (${((100 * d.length) / samples.length).toFixed(1)}%)`;
-          },
-        }),
+        dangerZoneMark(props.domainEnd),
+        heatBins(props.child, props.domainEnd),
         Plot.dotX(outliers, {
           fill: "hsl(0, 50%, 80%)",
           stroke: "hsl(0, 50%, 30%)",
@@ -225,6 +247,30 @@ const HorizontalDl = styled("dl", {
   },
 });
 
+function joined_bins(node: TreeNode, domainEnd: number): Plot.Rect {
+  const data = leaves(node);
+  if (data.length > 0 && isNewTrackerData(data[0])) {
+    // WIP, just doing first one as a test for now
+    return Plot.rect(joined_hists(node), {
+      y1: 0,
+      y2: "height",
+      x1: "left",
+      x2: "right",
+    });
+  } else {
+    const samples = joined_samples(node) ?? [];
+    return Plot.rectY(samples, {
+      ...Plot.binX<{ fill: string }>(
+        { y: "proportion" },
+        {
+          x: { value: (d) => d, interval: domainEnd / BIN_COUNT },
+          fill: "black",
+        }
+      ),
+    });
+  }
+}
+
 export function NodeSummary(props: { node: TreeNode; rootMode?: boolean }) {
   const [selectedChild, selectChild] = createSignal<TreeNode | undefined>();
 
@@ -243,8 +289,7 @@ export function NodeSummary(props: { node: TreeNode; rootMode?: boolean }) {
   });
 
   const histogram = createMemo<Plot.PlotOptions | undefined>(() => {
-    const samples = joined_samples(props.node) ?? [];
-
+    const bins = joined_bins(props.node, domainEnd());
     return {
       x: {
         domain: [0, domainEnd()],
@@ -255,18 +300,7 @@ export function NodeSummary(props: { node: TreeNode; rootMode?: boolean }) {
       y: {
         axis: null,
       },
-      marks: [
-        dangerZoneMark(domainEnd()),
-        Plot.rectY(samples, {
-          ...Plot.binX<{ fill: string }>(
-            { y: "proportion" },
-            {
-              x: { value: (d) => d, interval: domainEnd() / BIN_COUNT },
-              fill: "black",
-            }
-          ),
-        }),
-      ],
+      marks: [dangerZoneMark(domainEnd()), bins],
       marginLeft: 10,
       marginRight: 10,
       height: 125,
@@ -406,6 +440,8 @@ export function RootSummary() {
       externals.map(fromScriptEntry),
       (subject) => subject.addonName === "Plater" && subject.frameName === "Core"
     );
+
+    console.log(rec.data.onUpdateDelay);
 
     const roots: Record<string, IntermediateNode> = {
       "Frame Scripts": {

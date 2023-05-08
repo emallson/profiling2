@@ -1,5 +1,12 @@
-import { TreeNode, buildScriptTree, joined_samples, punch } from "./frame_tree";
-import { ScriptEntry } from "./saved_variables";
+import {
+  TreeNode,
+  buildScriptTree,
+  joined_samples,
+  mergeSketchDependent,
+  mergeSketchIndependent,
+  punch,
+} from "./frame_tree";
+import { ScriptEntry, SketchStats, bin_index_for, bin_index_to_left_edge } from "./saved_variables";
 import * as join from "./join_frames";
 
 const anon_OnUpdate: Pick<ScriptEntry, "subject"> = {
@@ -143,5 +150,144 @@ describe("joined_samples", () => {
 
     expect(spy).toHaveBeenCalledOnce();
     expect(samples).toBe(samples2);
+  });
+});
+
+describe("merge dependent sketches", () => {
+  it("should be a simple sum of bins and merge of outliers", () => {
+    const a: SketchStats = {
+      count: 200,
+      trivial_count: 90,
+      bins: [25, 50, 25, 0, 0],
+      outliers: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+    };
+
+    const b: SketchStats = {
+      count: 12,
+      trivial_count: 0,
+      outliers: [1, 1, 1, 1, 1, 1, 1, 11, 1, 1, 1, 1, 1, 1],
+      bins: [1, 1],
+    };
+
+    const result = mergeSketchDependent([a, b]);
+
+    expect(result).toStrictEqual({
+      count: 212,
+      trivial_count: 90,
+      bins: [26, 51, 25, 0, 0],
+      outliers: a.outliers.concat(b.outliers),
+    });
+  });
+});
+
+describe("merge independent histograms", () => {
+  it("should handle the singleton case, normalizing the data by count", () => {
+    // ignoring outliers for now
+    const a: SketchStats = {
+      count: 10,
+      trivial_count: 5,
+      bins: [0, 1, 2, 1, 1, 0],
+      outliers: [],
+    };
+
+    expect(mergeSketchIndependent([a])).toStrictEqual({
+      count: 10,
+      trivial_count: 0.5,
+      bins: [0, 0.1, 0.2, 0.1, 0.1, 0],
+      outliers: [],
+    });
+  });
+
+  it("should be able to merge the bins of two basic sketches", () => {
+    // still ignoring outliers
+
+    const a = {
+      count: 10,
+      trivial_count: 5,
+      bins: [0, 1, 2, 1, 1, 0],
+      outliers: [],
+    };
+
+    const b = {
+      count: 10,
+      trivial_count: 2,
+      bins: [1, 1, 2, 1, 0],
+      outliers: [8, 9, 10],
+    };
+
+    const merged = mergeSketchIndependent([a, b]);
+    const pa = 0.5;
+    const pb = 0.5;
+    const pa_trivial = 0.5;
+    const pb_trivial = 0.2;
+    const p_none = (1 - pa) * (1 - pb);
+
+    // the combined weight of each mode of the new sketch should be the weighted average of the
+    // corresponding modes in each component sketch. since by construction a and b have equal
+    // weight, this is just the simple average. this lets us check the behavior.
+
+    expect(merged.trivial_count).toBeCloseTo(
+      (a.trivial_count / a.count + b.trivial_count / b.count) / 2
+    );
+
+    console.log(
+      (1 - pa) * pb * pb_trivial + (1 - pb) * pa * pa_trivial + pa * pa_trivial * pb * pb_trivial
+    );
+
+    // expect(merged).toMatchObject({
+    //   count: 1,
+    //   trivial_count: (1 - pa + pa * pa_trivial) * (1 - pb + pb * pb_trivial) - p_none,
+    //   outliers: [8, 9, 10],
+    // });
+
+    const outlier_density = pb * 0.3;
+    expect(
+      (merged.bins?.reduce((a, b) => a + b) ?? 0) + merged.trivial_count + outlier_density
+    ).toBeCloseTo(1);
+    expect(merged.bins).toMatchInlineSnapshot(`
+      [
+        0.025,
+        0.04375,
+        0.0875,
+        0.04375,
+        0.018749999999999996,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0.005000000000000001,
+        0.015000000000000003,
+        0.010000000000000002,
+        0.0012500000000000002,
+        0,
+      ]
+    `);
   });
 });

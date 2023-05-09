@@ -6,6 +6,7 @@ import {
   TrackerData,
   bin_index_for,
   bin_index_to_left_edge,
+  defaultSketchParams,
   isNewTrackerData,
   isOldTrackerData,
 } from "./saved_variables";
@@ -155,49 +156,59 @@ export type Bin = {
   height: number;
 };
 
-const sketchToBins = (sketch: SketchStats): Bin[] => {
-  const bins = [sketch.trivial_count].concat(sketch.bins ?? []);
+const targetBinCount = 25;
 
-  for (const outlier of sketch.outliers) {
-    const ix = bin_index_for(outlier);
-    bins[ix] = (bins[ix] ?? 0) + 1 / sketch.count;
+const sketchToBins = (sketch: SketchStats, params: SketchParams, domainEnd: number): Bin[] => {
+  const bins = [];
+
+  const binWidth = domainEnd / targetBinCount;
+
+  let hist_ix = 0;
+  const hist_bins = sketch.bins?.slice(0) ?? [];
+
+  for (let i = 0; i < targetBinCount; i++) {
+    const left = i * binWidth;
+    const right = (i + 1) * binWidth;
+
+    let value = 0;
+
+    if (i === 0) {
+      // by construction, trivial data always goes here
+      value += sketch.trivial_count;
+    }
+
+    while (hist_ix < hist_bins.length) {
+      if (
+        bin_index_to_left_edge(hist_ix, params) < right &&
+        bin_index_to_left_edge(hist_ix + 1, params) > right
+      ) {
+        // take a partial amount from the next bin and reduce it by the corresponding amount
+        const h_left = bin_index_to_left_edge(hist_ix, params);
+        const h_right = bin_index_to_left_edge(hist_ix + 1, params);
+        const partial = (right - h_left) / (h_right - h_left);
+
+        const fullValue = hist_bins[hist_ix] ?? 0;
+        value += partial * fullValue;
+        hist_bins[hist_ix] = fullValue * (1 - partial);
+        break;
+      } else if (bin_index_to_left_edge(hist_ix + 1, params) <= right) {
+        // take the full value
+        value += hist_bins[hist_ix] ?? 0;
+        hist_ix += 1;
+      } else {
+        // we have passed the current bin, break the inner loop
+        break;
+      }
+    }
+
+    bins.push({
+      left,
+      right,
+      height: value / sketch.count,
+    });
   }
 
-  return bins
-    .map((height, ix) => {
-      const left = ix === 0 ? 0 : bin_index_to_left_edge(ix - 1);
-      const right = bin_index_to_left_edge(ix);
-
-      if (height === undefined) {
-        return {
-          left,
-          right,
-          height: 0,
-        };
-      }
-
-      return {
-        left,
-        right,
-        height: height <= 1 ? height : height / sketch.count,
-      };
-    })
-    .reduce<Bin[]>((bins, bin) => {
-      if (bins.length === 0) {
-        bins.push(bin);
-        return bins;
-      }
-
-      const prev = bins.at(-1)!;
-      if (bin.left - prev.right < 0.1 && prev.right - prev.left < 0.45) {
-        prev.right = bin.right;
-        prev.height += bin.height;
-      } else {
-        bins.push(bin);
-      }
-
-      return bins;
-    }, []);
+  return bins;
 };
 /**
  * Merge a set of dependent sketches.
@@ -228,12 +239,12 @@ export const mergeSketchDependent = (sketches: SketchStats[]): SketchStats => {
 const and = (...terms: number[]) => terms.reduce((p, x) => p * x, 1);
 const or = (...terms: number[]) => terms.reduce((p, x) => p + x, 0);
 
-const normalizedBinsFor = (sketch: SketchStats): number[] => {
-  const bins = (sketch.bins ?? []).map((b) => b / sketch.count);
+const binsWithOutliers = (sketch: SketchStats, params: SketchParams): SketchStats => {
+  const bins = sketch.bins?.slice(0) ?? [];
 
   for (const o of sketch.outliers) {
-    const k = bin_index_for(o);
-    bins[k] = (bins[k] ?? 0) + 1 / sketch.count;
+    const k = bin_index_for(o, params);
+    bins[k] = (bins[k] ?? 0) + 1;
   }
 
   for (let i = 0; i < bins.length; i++) {
@@ -242,8 +253,11 @@ const normalizedBinsFor = (sketch: SketchStats): number[] => {
     }
   }
 
-  return bins;
+  return { ...sketch, bins };
 };
+
+const normalizedBinsFor = (sketch: SketchStats): number[] =>
+  sketch.bins?.map((b) => b / sketch.count) ?? [];
 
 const join_outliers = (sketch_a: SketchStats, sketch_b: SketchStats): number[] => {
   const result = [];
@@ -281,9 +295,6 @@ export function mergeSketchPairIndependent(
 ): SketchStats {
   // doing some setup
   const count = sketch_a.count + sketch_b.count;
-  // moving the outliers into proper bins for ease of merging. outliers then no longer need to be
-  // treated with particular rigour to maintain consistency and can simply do something that makes
-  // visual sense
   const bins_a = normalizedBinsFor(sketch_a);
   const bins_b = normalizedBinsFor(sketch_b);
 
@@ -396,18 +407,37 @@ export function mergeSketchIndependent(sketches: SketchStats[], params: SketchPa
     throw new Error("cannot perform an independent merge of an empty dataset");
   }
 
-  return sketches.reduce((a, b) => mergeSketchPairIndependent(a, b, params));
+  return (
+    sketches
+      // moving the outliers into proper bins for ease of merging. outliers then no longer need to be
+      // treated with particular rigour to maintain consistency and can simply do something that makes
+      // visual sense
+      .map((sketch) => binsWithOutliers(sketch, params))
+      .reduce((a, b) => mergeSketchPairIndependent(a, b, params))
+  );
 }
 
-export function joined_hists(node: TreeNode, params?: SketchParams): Bin[] | undefined {
+export function joined_hists(
+  node: TreeNode,
+  params: SketchParams | undefined,
+  domainEnd: number
+): Bin[] | undefined {
+  const sketchParams = params ?? defaultSketchParams;
   if (isDataNode(node) && isNewTrackerData(node.self)) {
-    const bins = sketchToBins(node.self.sketch);
+    const bins = sketchToBins(
+      binsWithOutliers(node.self.sketch, sketchParams),
+      sketchParams,
+      domainEnd
+    );
     return bins;
   } else if (isIntermediateNode(node)) {
-    // we are ignoring `joined_samples` for now. perf problem to FIXME later
     const scripts = leaves(node).filter(isNewTrackerData);
     if (scripts.length === 1) {
-      const bins = sketchToBins(scripts[0].sketch);
+      const bins = sketchToBins(
+        binsWithOutliers(scripts[0].sketch, sketchParams),
+        sketchParams,
+        domainEnd
+      );
       return bins;
     } else if (scripts.length > 0) {
       const dependent = params ? scripts.filter((s) => s.dependent) : scripts;
@@ -421,8 +451,11 @@ export function joined_hists(node: TreeNode, params?: SketchParams): Bin[] | und
             ),
           ]
         : [];
-      // TODO fix scale
-      const bins = sketchToBins(mergeSketchDependent(dependent.map((s) => s.sketch).concat(ind)));
+      const bins = sketchToBins(
+        mergeSketchDependent(dependent.map((s) => s.sketch).concat(ind)),
+        sketchParams,
+        domainEnd
+      );
       return bins;
     }
   } else {

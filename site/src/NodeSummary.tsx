@@ -11,10 +11,20 @@ import {
   leaves,
 } from "./frame_tree";
 import { encounterName, useSelectedRecording } from "./EncounterSelector";
-import { createMemo, createSignal, ErrorBoundary, For, Show } from "solid-js";
+import {
+  createContext,
+  createMemo,
+  createSignal,
+  ErrorBoundary,
+  For,
+  Show,
+  useContext,
+} from "solid-js";
 import {
   NewTrackerData,
+  SketchParams,
   TrackerData,
+  defaultSketchParams,
   fromScriptEntry,
   isNewTrackerData,
   isOldTrackerData,
@@ -36,12 +46,15 @@ const Title = styled("span", {
   },
 });
 
+const TreeContext = createContext(defaultSketchParams);
+const useSketchParams = () => useContext(TreeContext);
+
 /**
  * If the new data doesn't have any non-trivial data, return the trivial value by itself.
  */
 function outlierData(data: NewTrackerData): number[] {
   if (data.sketch.outliers.length === 0) {
-    return [];
+    return [useSketchParams().trivial_cutoff];
   } else {
     return data.sketch.outliers;
   }
@@ -161,16 +174,24 @@ const heatBins = (child: TreeNode, domainEnd: number): Plot.Rect => {
       },
     });
   } else {
-    return Plot.rect(joined_hists(child), {
-      opacity: "height",
-      x1: "left",
-      x2: "right",
-      title(d) {
-        return `${d.left.toFixed(1)} - ${d.right.toFixed(1)}ms ― ${(d.height * 100).toFixed(
-          1
-        )}% of samples`;
-      },
-    });
+    return Plot.rect(
+      joined_hists(child, useSketchParams(), domainEnd)?.filter((v) => v.height > 0),
+      {
+        opacity: "height",
+        x1: "left",
+        x2: "right",
+        title(d) {
+          const pct = d.height * 100;
+          let pctFmt: string;
+          if (pct < 0.1) {
+            pctFmt = "<0.1";
+          } else {
+            pctFmt = pct.toFixed(1);
+          }
+          return `${d.left.toFixed(1)} - ${d.right.toFixed(1)}ms ― ${pctFmt}% of samples`;
+        },
+      }
+    );
   }
 };
 
@@ -192,7 +213,9 @@ export function ChildSummary(props: {
       marginLeft: 10,
       marginRight: 10,
       opacity: {
+        range: [0.04, 1],
         domain: [0, 1],
+        zero: false,
       },
       marks: [
         dangerZoneMark(props.domainEnd),
@@ -216,7 +239,16 @@ export function ChildSummary(props: {
     <>
       <ChildLabel
         class={props.selected ? selectedChildStyle : undefined}
-        onClick={() => props.onClick()}
+        onClick={(event) => {
+          if (event.ctrlKey) {
+            console.log(
+              props.child,
+              heatBins(props.child, props.domainEnd),
+              joined_hists(props.child, useSketchParams(), props.domainEnd)
+            );
+          }
+          props.onClick();
+        }}
         title={props.child.key}
       >
         {props.child.key}
@@ -247,7 +279,7 @@ function joined_bins(node: TreeNode, domainEnd: number): Plot.Rect {
   const data = leaves(node);
   if (data.length > 0 && isNewTrackerData(data[0])) {
     // WIP, just doing first one as a test for now
-    return Plot.rect(joined_hists(node), {
+    return Plot.rect(joined_hists(node, useSketchParams(), domainEnd), {
       y1: 0,
       y2: "height",
       x1: "left",
@@ -464,11 +496,17 @@ export function RootSummary() {
     };
   });
 
+  const sketchParams = createMemo<SketchParams>(
+    () => recording()?.data.sketch_params ?? defaultSketchParams
+  );
+
   return (
     <ErrorBoundary fallback={(err) => <DisplayError err={err} />}>
-      <RootContainer>
-        <Show when={overall()}>{(overall) => <NodeSummary node={overall()} rootMode />}</Show>
-      </RootContainer>
+      <TreeContext.Provider value={sketchParams()}>
+        <RootContainer>
+          <Show when={overall()}>{(overall) => <NodeSummary node={overall()} rootMode />}</Show>
+        </RootContainer>
+      </TreeContext.Provider>
     </ErrorBoundary>
   );
 }

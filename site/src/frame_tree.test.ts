@@ -4,9 +4,16 @@ import {
   joined_samples,
   mergeSketchDependent,
   mergeSketchIndependent,
+  mergeSketchPairIndependent,
   punch,
 } from "./frame_tree";
-import { ScriptEntry, SketchStats, bin_index_for, bin_index_to_left_edge } from "./saved_variables";
+import {
+  ScriptEntry,
+  SketchStats,
+  bin_index_for,
+  bin_index_to_left_edge,
+  defaultSketchParams,
+} from "./saved_variables";
 import * as join from "./join_frames";
 
 const anon_OnUpdate: Pick<ScriptEntry, "subject"> = {
@@ -181,7 +188,7 @@ describe("merge dependent sketches", () => {
 });
 
 describe("merge independent histograms", () => {
-  it("should handle the singleton case, normalizing the data by count", () => {
+  it("should handle the singleton case", () => {
     // ignoring outliers for now
     const a: SketchStats = {
       count: 10,
@@ -190,12 +197,26 @@ describe("merge independent histograms", () => {
       outliers: [],
     };
 
-    expect(mergeSketchIndependent([a])).toStrictEqual({
+    expect(mergeSketchIndependent([a], defaultSketchParams)).toStrictEqual(a);
+  });
+
+  it("should be able to merge two sketches with only trivial/outlier cases", () => {
+    const a = {
       count: 10,
-      trivial_count: 0.5,
-      bins: [0, 0.1, 0.2, 0.1, 0.1, 0],
-      outliers: [],
-    });
+      trivial_count: 5,
+      outliers: [1, 2, 3, 4, 5],
+    };
+    const b = {
+      count: 10,
+      trivial_count: 2,
+      outliers: [1, 2, 3, 4, 5, 6, 7, 8],
+    };
+
+    const merged = mergeSketchPairIndependent(a, b, defaultSketchParams);
+
+    expect(merged.trivial_count + (merged.bins?.reduce((a, b) => a + b, 0) ?? 0)).toBeCloseTo(
+      merged.count
+    );
   });
 
   it("should be able to merge the bins of two basic sketches", () => {
@@ -209,85 +230,18 @@ describe("merge independent histograms", () => {
     };
 
     const b = {
-      count: 10,
+      count: 11,
       trivial_count: 2,
       bins: [1, 1, 2, 1, 0],
-      outliers: [8, 9, 10],
+      outliers: [8, 9, 10, 11],
     };
 
-    const merged = mergeSketchIndependent([a, b]);
-    const pa = 0.5;
-    const pb = 0.5;
-    const pa_trivial = 0.5;
-    const pb_trivial = 0.2;
-    const p_none = (1 - pa) * (1 - pb);
+    const merged = mergeSketchPairIndependent(a, b, defaultSketchParams);
 
-    // the combined weight of each mode of the new sketch should be the weighted average of the
-    // corresponding modes in each component sketch. since by construction a and b have equal
-    // weight, this is just the simple average. this lets us check the behavior.
-
-    expect(merged.trivial_count).toBeCloseTo(
-      (a.trivial_count / a.count + b.trivial_count / b.count) / 2
+    // the sum of trivial + bins + should equal the total count.
+    // outliers are duplicated into bins as part of the merge process.
+    expect(merged.trivial_count + (merged.bins?.reduce((a, b) => a + b, 0) ?? 0)).toBeCloseTo(
+      merged.count
     );
-
-    console.log(
-      (1 - pa) * pb * pb_trivial + (1 - pb) * pa * pa_trivial + pa * pa_trivial * pb * pb_trivial
-    );
-
-    // expect(merged).toMatchObject({
-    //   count: 1,
-    //   trivial_count: (1 - pa + pa * pa_trivial) * (1 - pb + pb * pb_trivial) - p_none,
-    //   outliers: [8, 9, 10],
-    // });
-
-    const outlier_density = pb * 0.3;
-    expect(
-      (merged.bins?.reduce((a, b) => a + b) ?? 0) + merged.trivial_count + outlier_density
-    ).toBeCloseTo(1);
-    expect(merged.bins).toMatchInlineSnapshot(`
-      [
-        0.025,
-        0.04375,
-        0.0875,
-        0.04375,
-        0.018749999999999996,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0.005000000000000001,
-        0.015000000000000003,
-        0.010000000000000002,
-        0.0012500000000000002,
-        0,
-      ]
-    `);
   });
 });

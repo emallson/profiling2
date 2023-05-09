@@ -13,12 +13,8 @@ import {
 import { encounterName, useSelectedRecording } from "./EncounterSelector";
 import { createMemo, createSignal, ErrorBoundary, For, Show } from "solid-js";
 import {
-  BIN_OFFSET,
-  GAMMA,
   NewTrackerData,
-  TRIVIAL_TIME,
   TrackerData,
-  bin_index_to_left_edge,
   fromScriptEntry,
   isNewTrackerData,
   isOldTrackerData,
@@ -45,7 +41,7 @@ const Title = styled("span", {
  */
 function outlierData(data: NewTrackerData): number[] {
   if (data.sketch.outliers.length === 0) {
-    return [TRIVIAL_TIME];
+    return [];
   } else {
     return data.sketch.outliers;
   }
@@ -440,8 +436,6 @@ export function RootSummary() {
       externals.map(fromScriptEntry),
       (subject) => subject.addonName === "Plater" && subject.frameName === "Core"
     );
-
-    console.log(rec.data.onUpdateDelay);
 
     const roots: Record<string, IntermediateNode> = {
       "Frame Scripts": {

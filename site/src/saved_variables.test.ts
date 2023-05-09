@@ -1,4 +1,9 @@
-import { TRIVIAL_TIME, bin_index_for, bin_index_to_left_edge, parse } from "./saved_variables";
+import {
+  bin_index_for,
+  bin_index_to_left_edge,
+  defaultSketchParams,
+  parse,
+} from "./saved_variables";
 import * as fs from "fs";
 import * as fc from "fast-check";
 
@@ -39,7 +44,7 @@ describe("bin indexing", () => {
   });
 
   it("should have the expected 0 value", () => {
-    expect(bin_index_to_left_edge(0)).toBe(TRIVIAL_TIME);
+    expect(bin_index_to_left_edge(0)).toBe(defaultSketchParams.trivial_cutoff);
   });
 
   it("should behave as expected for negative values", () => {

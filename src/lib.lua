@@ -239,6 +239,7 @@ function profiling2.buildUsageTable()
     onUpdateDelay = renderTracker:export(),
     scripts = buildInternalUsageTable(trackedFunctions),
     externals = buildInternalUsageTable(trackedExternals),
+    sketch_params = ns.sketch.params,
   }
 
   return results
@@ -403,7 +404,7 @@ if ns.isScriptProfilingEnabled() then
   frame:RegisterEvent("CHALLENGE_MODE_COMPLETED")
   frame:RegisterEvent("CHALLENGE_MODE_RESET")
   frame:SetScript("OnUpdate", function(_, elapsed)
-    renderTracker:record(elapsed)
+    renderTracker:record(elapsed * 1000)
     ns.tracker.nextFrame()
   end)
   frame:SetScript("OnEvent", function(_, eventName, ...)

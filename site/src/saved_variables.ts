@@ -55,21 +55,34 @@ export function fromScriptEntry([key, data]: [string, recording.TrackerData]): S
   };
 }
 
-export const ALPHA = 0.01;
-export const GAMMA = (1 + ALPHA) / (1 - ALPHA);
-export const BIN_OFFSET = -34;
-export const TRIVIAL_TIME = Math.pow(GAMMA, BIN_OFFSET);
+const ALPHA = 0.01;
+const GAMMA = (1 + ALPHA) / (1 - ALPHA);
+const BIN_OFFSET = -34;
+const TRIVIAL_TIME = Math.pow(GAMMA, BIN_OFFSET);
 
-export function bin_index_to_left_edge(ix: number): number {
-  return Math.pow(GAMMA, ix + BIN_OFFSET);
+export const defaultSketchParams: recording.SketchParams = {
+  alpha: ALPHA,
+  gamma: GAMMA,
+  bin_offset: BIN_OFFSET,
+  trivial_cutoff: TRIVIAL_TIME,
+};
+
+export function bin_index_to_left_edge(
+  ix: number,
+  { gamma, bin_offset }: recording.SketchParams = defaultSketchParams
+): number {
+  return Math.pow(gamma, ix + bin_offset);
 }
 
 /**
  * Inverse of `bin_index_to_left_edge` with some thresholding.
  */
-export function bin_index_for(value: number): number {
+export function bin_index_for(
+  value: number,
+  { gamma, bin_offset }: recording.SketchParams = defaultSketchParams
+): number {
   // the subtraction here deals with a shitty FP issue
-  return Math.ceil(Math.log(value - 1e-12) / Math.log(GAMMA)) - BIN_OFFSET;
+  return Math.ceil(Math.log(value - 1e-12) / Math.log(gamma)) - bin_offset;
 }
 
 export type ParseResult =

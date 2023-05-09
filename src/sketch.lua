@@ -13,11 +13,12 @@
 local ns = select(2, ...)
 
 -- parameters for DDSketch
-local alpha = 0.01
+local alpha = 0.05
 local gamma = (1.0 + alpha) / (1.0 - alpha)
 -- we calculate a fixed offset for the bin calculation function that is used to shift bins onto the
 -- 1..n range that gets the array-table fast path in Lua.
-local bin_offset = -34
+local target_T = 0.5
+local bin_offset = math.ceil(math.log(target_T, gamma))
 local T = math.pow(gamma, bin_offset)
 local k = 10
 
@@ -157,6 +158,12 @@ if type(ns) == 'table' then
   ---@class SketchNs
   local sketchNs = {
     new = new,
+    params = {
+      trivial_cutoff = T,
+      alpha = alpha,
+      gamma = gamma,
+      bin_offset = bin_offset,
+    }
   }
 
   ns.sketch = sketchNs

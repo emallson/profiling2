@@ -22,7 +22,7 @@ function build_weights(data: JoinData): number[] {
   return weights;
 }
 
-function uniform_choice<T>(data: T[]): T {
+export function uniform_choice<T>(data: T[]): T {
   return data[Math.floor(Math.random() * data.length)];
 }
 

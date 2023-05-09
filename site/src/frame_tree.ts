@@ -1,6 +1,7 @@
-import { JoinData, join_data } from "./join_frames";
+import { JoinData, join_data, uniform_choice } from "./join_frames";
 import {
   ScriptEntry,
+  SketchParams,
   SketchStats,
   TrackerData,
   bin_index_for,
@@ -224,6 +225,129 @@ export const mergeSketchDependent = (sketches: SketchStats[]): SketchStats => {
   return result;
 };
 
+const and = (...terms: number[]) => terms.reduce((p, x) => p * x, 1);
+const or = (...terms: number[]) => terms.reduce((p, x) => p + x, 0);
+
+const normalizedBinsFor = (sketch: SketchStats): number[] => {
+  const bins = (sketch.bins ?? []).map((b) => b / sketch.count);
+
+  for (const o of sketch.outliers) {
+    const k = bin_index_for(o);
+    bins[k] = (bins[k] ?? 0) + 1 / sketch.count;
+  }
+
+  for (let i = 0; i < bins.length; i++) {
+    if (bins[i] === undefined) {
+      bins[i] = 0;
+    }
+  }
+
+  return bins;
+};
+
+const join_outliers = (sketch_a: SketchStats, sketch_b: SketchStats): number[] => {
+  const result = [];
+
+  // TODO do the math to verify this is representative
+  const total = sketch_a.outliers.length + sketch_b.outliers.length;
+  const p_a = sketch_a.outliers.length / total;
+  const p_b = 1 - p_a;
+
+  for (let i = 0; i < 10; i++) {
+    let value = 0;
+    if (Math.random() < p_a) {
+      value += uniform_choice(sketch_a.outliers);
+
+      if (Math.random() < p_b) {
+        value += uniform_choice(sketch_b.outliers);
+      }
+    } else {
+      value += uniform_choice(sketch_b.outliers);
+
+      if (Math.random() < p_a) {
+        value += uniform_choice(sketch_a.outliers);
+      }
+    }
+    result.push(value);
+  }
+
+  return result;
+};
+
+export function mergeSketchPairIndependent(
+  sketch_a: SketchStats,
+  sketch_b: SketchStats,
+  params: SketchParams
+): SketchStats {
+  // doing some setup
+  const count = sketch_a.count + sketch_b.count;
+  // moving the outliers into proper bins for ease of merging. outliers then no longer need to be
+  // treated with particular rigour to maintain consistency and can simply do something that makes
+  // visual sense
+  const bins_a = normalizedBinsFor(sketch_a);
+  const bins_b = normalizedBinsFor(sketch_b);
+
+  // construct the base measure
+  const p_a_raw = sketch_a.count / count;
+  const p_b_raw = sketch_b.count / count;
+
+  // now the 4-element measure
+  const p_none = (1 - p_a_raw) * (1 - p_b_raw);
+  const p_both = p_a_raw * p_b_raw;
+  const p_a_only = p_a_raw * (1 - p_b_raw);
+  const p_b_only = (1 - p_a_raw) * p_b_raw;
+
+  // probability of trivial or no activation
+  const p_a_trivial = sketch_a.trivial_count / sketch_a.count;
+  const p_b_trivial = sketch_b.trivial_count / sketch_b.count;
+  const p_trivial_none = or(
+    p_none,
+    and(p_a_only, p_a_trivial),
+    and(p_b_only, p_b_trivial),
+    and(p_both, p_a_trivial, p_b_trivial)
+  );
+
+  const norm_bins: number[] = [];
+
+  // bin weight from each activating independently
+  for (const [p_unique, p_other_trivial, bins] of [
+    [p_a_only, p_b_trivial, bins_a],
+    [p_b_only, p_a_trivial, bins_b],
+  ] as Array<[number, number, number[]]>) {
+    for (let j = 0; j < bins.length; j++) {
+      norm_bins[j] = or(
+        norm_bins[j] ?? 0,
+        and(or(p_unique, and(p_both, p_other_trivial)), bins[j])
+      );
+    }
+  }
+
+  // now the complicated case: both trigger at once. we pick one to be the "base" histogram and
+  // shift bits of it according to the other histogram.
+  //
+  // it is critical that we be operating on normalized bins here, otherwise this is nonsensical and
+  // results in incorrect weights
+  const [base, other] = [bins_a, bins_b];
+  for (let j = 0; j < other.length; j++) {
+    for (let i = 0; i < base.length; i++) {
+      const k = bin_index_for(
+        bin_index_to_left_edge(j, params) + bin_index_to_left_edge(i, params),
+        params
+      );
+      norm_bins[k] = or(norm_bins[k] ?? 0, and(p_both, base[i], other[j]));
+    }
+  }
+
+  // now we denormalize everything and construct the result
+  const scale = count / (1 - p_none);
+  return {
+    count: count,
+    outliers: join_outliers(sketch_a, sketch_b),
+    trivial_count: (p_trivial_none - p_none) * scale,
+    bins: norm_bins.map((b) => (b !== undefined ? b * scale : 0)),
+  };
+}
+
 /**
  * Okay, this method SUCKS. But.
  *
@@ -267,94 +391,38 @@ export const mergeSketchDependent = (sketches: SketchStats[]): SketchStats => {
  * totally accurate, but since the values counted by this bin are frequently much closer to 0 than
  * to T, it is likely more accurate than the alternative (shifting by k(T))
  */
-export function mergeSketchIndependent(sketches: SketchStats[]): SketchStats {
+export function mergeSketchIndependent(sketches: SketchStats[], params: SketchParams): SketchStats {
   if (sketches.length === 0) {
     throw new Error("cannot perform an independent merge of an empty dataset");
   }
 
-  const total_weight = sketches.reduce((total, sketch) => total + sketch.count, 0);
-  const total_trivial = sketches.reduce((total, sketch) => total + sketch.trivial_count, 0);
-  const result_bins: number[] = [];
-
-  const add_bin = (ix: number, w: number) => {
-    // don't extend the array for 0s
-    if (ix > result_bins.length && w === 0) {
-      return;
-    }
-    result_bins[ix] = (result_bins[ix] ?? 0) + w;
-  };
-  const shift_bin = (from_ix: number, to_ix: number, v: number) => {
-    add_bin(from_ix, -v);
-    add_bin(to_ix, v);
-  };
-
-  for (const sketch of sketches) {
-    // relative probability of this sketch triggering
-    const p_activate = sketch.count / total_weight;
-
-    if (sketch.bins === undefined || sketch.bins === null) {
-      // if we have no bins, we just aren't shifting it. outliers are handled separately
-      continue;
-    }
-
-    // first, we handle the non-unique activation case. this is shifting existing data based on the
-    // probability of this activating *and* running for the amount of time in bin j
-    //
-    // the first sketch considered won't have anything to shift, so this does nothing and only the
-    // unique activation (see below) is really run
-
-    // we work with a copy of the previous data because it is difficult for me to reason through
-    // in-place shifting right now.
-    const tmp = result_bins.slice(0);
-    for (let j = 0; j < sketch.bins.length; j++) {
-      const pct = (p_activate * sketch.bins[j]) / sketch.count;
-      for (let i = 0; i < tmp.length; i++) {
-        const k = bin_index_for(bin_index_to_left_edge(j) + bin_index_to_left_edge(i));
-        shift_bin(i, k, pct * (tmp[i] ?? 0));
-      }
-    }
-
-    // NOTE: must be careful to normalize all bin values by sketch.count other the combined weights
-    // get fucked
-    for (let j = 0; j < sketch.bins.length; j++) {
-      add_bin(j, (sketch.bins[j] / sketch.count) * p_activate);
-    }
-  }
-
-  for (let i = 0; i < result_bins.length; i++) {
-    if (result_bins[i] === undefined) {
-      result_bins[i] = 0;
-    }
-  }
-
-  return {
-    count: total_weight,
-    trivial_count: total_trivial / total_weight,
-    bins: result_bins,
-    outliers: sketches.reduce<number[]>((a, b) => a.concat(b.outliers), []),
-  };
+  return sketches.reduce((a, b) => mergeSketchPairIndependent(a, b, params));
 }
 
-export function joined_hists(node: TreeNode): Bin[] | undefined {
+export function joined_hists(node: TreeNode, params?: SketchParams): Bin[] | undefined {
   if (isDataNode(node) && isNewTrackerData(node.self)) {
     const bins = sketchToBins(node.self.sketch);
-    console.log("data node", bins);
     return bins;
   } else if (isIntermediateNode(node)) {
     // we are ignoring `joined_samples` for now. perf problem to FIXME later
     const scripts = leaves(node).filter(isNewTrackerData);
     if (scripts.length === 1) {
       const bins = sketchToBins(scripts[0].sketch);
-      console.log("single child", bins);
       return bins;
     } else if (scripts.length > 0) {
-      const dependent = scripts.filter((s) => s.dependent);
-      const independent = scripts.filter((s) => !s.dependent);
+      const dependent = params ? scripts.filter((s) => s.dependent) : scripts;
+      const independent = params ? scripts.filter((s) => !s.dependent) : [];
 
-      const ind = mergeSketchIndependent(independent.map((s) => s.sketch));
+      const ind = params
+        ? [
+            mergeSketchIndependent(
+              independent.map((s) => s.sketch),
+              params
+            ),
+          ]
+        : [];
       // TODO fix scale
-      const bins = sketchToBins(mergeSketchDependent(dependent.map((s) => s.sketch).concat([ind])));
-      console.log("merge", node, bins);
+      const bins = sketchToBins(mergeSketchDependent(dependent.map((s) => s.sketch).concat(ind)));
       return bins;
     }
   } else {

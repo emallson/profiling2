@@ -18,6 +18,16 @@ pub struct ParsedRecording<'a> {
     pub externals: Option<HashMap<Cow<'a, str>, TrackerData>>,
     #[serde(rename = "onUpdateDelay")]
     pub on_update_delay: TrackerData,
+    pub sketch_params: Option<SketchParams>,
+}
+
+#[derive(Debug, PartialEq, Clone, Serialize, Deserialize, JsonSchema)]
+#[schemars(deny_unknown_fields)]
+pub struct SketchParams {
+    pub alpha: f64,
+    pub gamma: f64,
+    pub bin_offset: u64,
+    pub trivial_cutoff: f64,
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize, JsonSchema)]

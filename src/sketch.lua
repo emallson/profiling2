@@ -18,7 +18,7 @@ local gamma = (1.0 + alpha) / (1.0 - alpha)
 -- we calculate a fixed offset for the bin calculation function that is used to shift bins onto the
 -- 1..n range that gets the array-table fast path in Lua.
 local target_T = 0.5
-local bin_offset = math.ceil(math.log(target_T, gamma))
+local bin_offset = math.ceil(math.log(target_T) / math.log(gamma))
 local T = math.pow(gamma, bin_offset)
 local k = 10
 
@@ -26,7 +26,8 @@ local k = 10
 ---@param obs number
 ---@return number
 local function bin_index(obs)
-  return math.ceil(math.log(obs, gamma)) - bin_offset
+  -- wow does NOT support the 2nd parameter of math.log!
+  return math.ceil(math.log(obs) / math.log(gamma)) - bin_offset
 end
 
 ---Pre-built storage tables for mode 3. We build a number of these on load to avoid additional latency during

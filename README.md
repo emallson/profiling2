@@ -55,7 +55,7 @@ involves incrementing a number, while the small min heap used by Tier 2 is very 
 Very few scripts (in theory) should have any data in Tier 3. As a result, the histogram is lazily
 constructed on-demand. A pool of histogram storage is pre-allocated to avoid having to do any real
 work during combat, but when the pool is exhausted it will create a new histogram (which involves
-allocating a ~200 element array of 0s. Nothing too insane, but not free).
+allocating a ~50 element array of 0s. Nothing too insane, but not free).
 
 These metrics are recorded for:
 

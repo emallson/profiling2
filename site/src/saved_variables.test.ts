@@ -35,8 +35,8 @@ describe("bin indexing", () => {
     fc.assert(
       fc.property(fc.integer({ min: 0, max: 200 }), fc.context(), (x, ctx) => {
         const left = bin_index_for(bin_index_to_left_edge(x));
-        ctx.log(left.toString());
         ctx.log(bin_index_to_left_edge(x).toString());
+        ctx.log(left.toString());
 
         return left === x;
       })

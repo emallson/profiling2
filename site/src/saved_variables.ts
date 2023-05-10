@@ -55,9 +55,9 @@ export function fromScriptEntry([key, data]: [string, recording.TrackerData]): S
   };
 }
 
-const ALPHA = 0.01;
+const ALPHA = 0.05;
 const GAMMA = (1 + ALPHA) / (1 - ALPHA);
-const BIN_OFFSET = -34;
+const BIN_OFFSET = Math.ceil(Math.log(0.5) / Math.log(GAMMA));
 const TRIVIAL_TIME = Math.pow(GAMMA, BIN_OFFSET);
 
 export const defaultSketchParams: recording.SketchParams = {
@@ -81,8 +81,8 @@ export function bin_index_for(
   value: number,
   { gamma, bin_offset }: recording.SketchParams = defaultSketchParams
 ): number {
-  // the subtraction here deals with a shitty FP issue
-  return Math.ceil(Math.log(value - 1e-12) / Math.log(gamma)) - bin_offset;
+  const target = Math.fround(Math.log(value) / Math.log(gamma));
+  return Math.ceil(target - bin_offset);
 }
 
 export type ParseResult =

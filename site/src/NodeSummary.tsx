@@ -6,10 +6,10 @@ import {
   TreeNode,
   buildScriptTree,
   isIntermediateNode,
-  joined_hists,
   joined_samples,
   leaves,
 } from "./frame_tree";
+import { joined_hists } from "./sketches";
 import { encounterName, useSelectedRecording } from "./EncounterSelector";
 import {
   createContext,
@@ -46,8 +46,8 @@ const Title = styled("span", {
   },
 });
 
-const TreeContext = createContext(defaultSketchParams);
-const useSketchParams = () => useContext(TreeContext);
+const TreeContext = createContext(() => defaultSketchParams);
+const useSketchParams = () => useContext(TreeContext)();
 
 /**
  * If the new data doesn't have any non-trivial data, return the trivial value by itself.
@@ -502,7 +502,7 @@ export function RootSummary() {
 
   return (
     <ErrorBoundary fallback={(err) => <DisplayError err={err} />}>
-      <TreeContext.Provider value={sketchParams()}>
+      <TreeContext.Provider value={sketchParams}>
         <RootContainer>
           <Show when={overall()}>{(overall) => <NodeSummary node={overall()} rootMode />}</Show>
         </RootContainer>

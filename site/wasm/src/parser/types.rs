@@ -26,7 +26,7 @@ pub struct ParsedRecording<'a> {
 pub struct SketchParams {
     pub alpha: f64,
     pub gamma: f64,
-    pub bin_offset: u64,
+    pub bin_offset: i64,
     pub trivial_cutoff: f64,
 }
 

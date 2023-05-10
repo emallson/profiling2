@@ -261,13 +261,36 @@ export function mergeSketchPairIndependent(
  * totally accurate, but since the values counted by this bin are frequently much closer to 0 than
  * to T, it is likely more accurate than the alternative (shifting by k(T))
  */
-export function mergeSketchIndependent(sketches: SketchStats[], params: SketchParams): SketchStats {
+export function mergeSketchIndependent(
+  sketches: SketchStats[],
+  params: SketchParams,
+  cutoff = 0
+): SketchStats {
   if (sketches.length === 0) {
     throw new Error("cannot perform an independent merge of an empty dataset");
   }
 
+  let filtered_sketches = sketches;
+  if (sketches.length > 10 && cutoff > 0) {
+    // discard scripts that don't have high outliers and that contribute less than a `cutoff`
+    // fraction of the mass contributed by the top script.
+    //
+    // we use the top script as a reference point rather than sum because it avoids the cutoff
+    // removing *all* data (lol) in cases where you have 1/cutoff equally-weighted scripts
+    //
+    // at the top of the tree, there can be hundreds of scripts, most of which have few-to-no
+    // runs and will not meaningfully impact the visual result if omitted
+    const max = Math.max.apply(
+      null,
+      sketches.map((b) => b.count)
+    );
+    filtered_sketches = sketches.filter(
+      (sketch) => sketch.count / max > cutoff || (Math.max.apply(null, sketch.outliers) ?? 0) > 5
+    );
+  }
+
   return (
-    sketches
+    filtered_sketches
       // moving the outliers into proper bins for ease of merging. outliers then no longer need to be
       // treated with particular rigour to maintain consistency and can simply do something that makes
       // visual sense
@@ -306,7 +329,8 @@ export function joined_hists(
         ? [
             mergeSketchIndependent(
               independent.map((s) => s.sketch),
-              params
+              params,
+              0.025
             ),
           ]
         : [];

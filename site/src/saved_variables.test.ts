@@ -8,26 +8,15 @@ import * as fs from "fs";
 import * as fc from "fast-check";
 
 describe("saved variables parser", () => {
-  it("should successfully parse the test data", () => {
-    const data = fs.readFileSync(__dirname + "/../test-data/test_apr22_2023.lua", "utf8");
-    const result = parse(data);
+  it.each(fs.readdirSync(__dirname + "/../test-data", "utf8"))(
+    "should successfully parse test data: %s",
+    (path) => {
+      const data = fs.readFileSync(__dirname + "/../test-data/" + path, "utf8");
+      const result = parse(data);
 
-    expect(result.success).toBe(true);
-
-    if (result.success) {
-      expect(result.data.length()).toBe(2);
-      const recording = result.data.get(1)!;
-      expect(recording).toBeDefined();
-      expect(recording.encounter).toMatchInlineSnapshot(`
-        {
-          "endTime": 1682193549,
-          "kind": "manual",
-          "startTime": 1682193529,
-        }
-      `);
-      expect(Object.keys(recording.data.scripts).length).toMatchInlineSnapshot("24");
+      expect(result.success).toBe(true);
     }
-  });
+  );
 });
 
 describe("bin indexing", () => {

@@ -11,6 +11,8 @@ local thisAddonName = select(1, ...)
 local profiling2 = {}
 ns.core = profiling2
 
+local addonVersion = GetAddOnMetadata and GetAddOnMetadata(thisAddonName, "Version") or "unknown"
+
 ---Get the name of the frame for path construction. Uses GetName if possible, falls back to GetDebugName if unset.
 ---@param frame Frame|ParentedObject
 ---@return string
@@ -310,6 +312,7 @@ local function insertRecording(recording)
     local compressed = LibDeflate:EncodeForPrint(LibDeflate:CompressDeflate(serialized))
     table.insert(Profiling2_Storage.recordings, {
       encounter = recording.encounter,
+      version = addonVersion,
       data = compressed,
     })
   end)

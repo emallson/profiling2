@@ -27,15 +27,13 @@ describe('the distributional sketch system', function()
       end
     end
 
-    local copy = {}
-    for k, v in ipairs(data.exponential) do
-      copy[k] = v
+    local bin_sum = 0
+    for k, v in pairs(result.bins) do
+      bin_sum = bin_sum + v
     end
-    local median = (copy[math.floor((#data.exponential - 1) / 2)] + copy[math.ceil(#data.exponential / 2)]) / 2
 
     assert.are.equal(result.trivial_count, exp_trivial)
-    -- just picked the median and checking it
-    assert.are.equal(result.bins[sketch.bin_index(median)], 6)
+    assert.are.equal(bin_sum, #data.exponential - exp_trivial - #result.outliers)
     assert.are.equal(math.max(table.unpack(result.outliers)), max)
   end)
 

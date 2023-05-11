@@ -325,15 +325,16 @@ export function joined_hists(
       const dependent = params ? scripts.filter((s) => s.dependent) : scripts;
       const independent = params ? scripts.filter((s) => !s.dependent) : [];
 
-      const ind = params
-        ? [
-            mergeSketchIndependent(
-              independent.map((s) => s.sketch),
-              params,
-              0.025
-            ),
-          ]
-        : [];
+      const ind =
+        params && independent.length > 0
+          ? [
+              mergeSketchIndependent(
+                independent.map((s) => s.sketch),
+                params,
+                0.025
+              ),
+            ]
+          : [];
       const bins = sketchToBins(
         mergeSketchDependent(dependent.map((s) => s.sketch).concat(ind)),
         sketchParams,

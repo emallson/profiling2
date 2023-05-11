@@ -1,5 +1,11 @@
+import { INTERESTING_DURATION } from "./NodeSummary";
 import { SketchStats, defaultSketchParams } from "./saved_variables";
-import { mergeSketchDependent, mergeSketchIndependent } from "./sketches";
+import {
+  binsWithOutliers,
+  mergeSketchDependent,
+  mergeSketchIndependent,
+  sketchToBins,
+} from "./sketches";
 
 describe("merge dependent sketches", () => {
   it("should be a simple sum of bins and merge of outliers", () => {
@@ -109,5 +115,24 @@ describe("merge independent histograms", () => {
     expect(merged.trivial_count + (merged.bins?.reduce((a, b) => a + b, 0) ?? 0)).toBeCloseTo(
       merged.count
     );
+  });
+});
+
+describe("sketchToBins", () => {
+  it("should convert a sketch with a single outlier point to bins that have total weight 1", () => {
+    const sketch = {
+      bins: undefined,
+      count: 1,
+      outliers: [10.5275],
+      trivial_count: 0,
+    };
+
+    const params = defaultSketchParams;
+
+    const outlierSketch = binsWithOutliers(sketch, params);
+
+    const bins = sketchToBins(outlierSketch, params, INTERESTING_DURATION);
+
+    expect(bins.reduce((v, b) => v + b.height, 0)).toBeCloseTo(1);
   });
 });

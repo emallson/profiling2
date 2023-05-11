@@ -327,6 +327,7 @@ export function NodeSummary(props: { node: TreeNode; rootMode?: boolean }) {
       },
       y: {
         axis: null,
+        domain: [0, 1],
       },
       marks: [dangerZoneMark(domainEnd()), bins],
       marginLeft: 10,

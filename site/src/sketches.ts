@@ -17,7 +17,11 @@ export type Bin = {
 
 const targetBinCount = 25;
 
-const sketchToBins = (sketch: SketchStats, params: SketchParams, domainEnd: number): Bin[] => {
+export const sketchToBins = (
+  sketch: SketchStats,
+  params: SketchParams,
+  domainEnd: number
+): Bin[] => {
   const bins = [];
 
   const binWidth = domainEnd / targetBinCount;
@@ -37,10 +41,9 @@ const sketchToBins = (sketch: SketchStats, params: SketchParams, domainEnd: numb
     }
 
     while (hist_ix < hist_bins.length) {
-      if (
-        bin_index_to_left_edge(hist_ix, params) < right &&
-        bin_index_to_left_edge(hist_ix + 1, params) > right
-      ) {
+      const h_left = bin_index_to_left_edge(hist_ix, params);
+      const h_right = bin_index_to_left_edge(hist_ix + 1, params);
+      if (h_left < right && h_right > right) {
         // take a partial amount from the next bin and reduce it by the corresponding amount
         const h_left = bin_index_to_left_edge(hist_ix, params);
         const h_right = bin_index_to_left_edge(hist_ix + 1, params);
@@ -50,7 +53,7 @@ const sketchToBins = (sketch: SketchStats, params: SketchParams, domainEnd: numb
         value += partial * fullValue;
         hist_bins[hist_ix] = fullValue * (1 - partial);
         break;
-      } else if (bin_index_to_left_edge(hist_ix + 1, params) <= right) {
+      } else if (h_right <= right) {
         // take the full value
         value += hist_bins[hist_ix] ?? 0;
         hist_ix += 1;
@@ -98,7 +101,7 @@ export const mergeSketchDependent = (sketches: SketchStats[]): SketchStats => {
 const and = (...terms: number[]) => terms.reduce((p, x) => p * x, 1);
 const or = (...terms: number[]) => terms.reduce((p, x) => p + x, 0);
 
-const binsWithOutliers = (sketch: SketchStats, params: SketchParams): SketchStats => {
+export const binsWithOutliers = (sketch: SketchStats, params: SketchParams): SketchStats => {
   const bins = sketch.bins?.slice(0) ?? [];
 
   for (const o of sketch.outliers) {

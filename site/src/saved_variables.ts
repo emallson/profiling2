@@ -82,7 +82,7 @@ export function bin_index_for(
   { gamma, bin_offset }: recording.SketchParams = defaultSketchParams
 ): number {
   const target = Math.fround(Math.log(value) / Math.log(gamma));
-  return Math.ceil(target - bin_offset);
+  return Math.floor(target - bin_offset);
 }
 
 export type ParseResult =

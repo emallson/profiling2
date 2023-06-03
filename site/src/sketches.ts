@@ -22,52 +22,38 @@ export const sketchToBins = (
   params: SketchParams,
   domainEnd: number
 ): Bin[] => {
-  const bins = [];
+  const bins = [
+    {
+      left: 0,
+      right: params.trivial_cutoff,
+      height: sketch.trivial_count / sketch.count,
+    },
+  ];
 
   const binWidth = domainEnd / targetBinCount;
 
-  let hist_ix = 0;
-  const hist_bins = sketch.bins?.slice(0) ?? [];
+  const hist_bins = sketch.bins ?? [];
 
-  for (let i = 0; i < targetBinCount; i++) {
-    const left = i * binWidth;
-    const right = (i + 1) * binWidth;
+  for (let ix = 0; ix < hist_bins.length; ix++) {
+    const h_left = bin_index_to_left_edge(ix, params);
+    const h_right = bin_index_to_left_edge(ix + 1, params);
 
-    let value = 0;
-
-    if (i === 0) {
-      // by construction, trivial data always goes here
-      value += sketch.trivial_count;
+    const bin = bins[bins.length - 1];
+    if (h_right - bin.left >= 1.25 * binWidth) {
+      bins.push({
+        left: h_left,
+        right: h_right,
+        height: hist_bins[ix] / sketch.count,
+      });
+    } else {
+      bin.right = h_right;
+      bin.height += hist_bins[ix] / sketch.count;
     }
+  }
 
-    while (hist_ix < hist_bins.length) {
-      const h_left = bin_index_to_left_edge(hist_ix, params);
-      const h_right = bin_index_to_left_edge(hist_ix + 1, params);
-      if (h_left < right && h_right > right) {
-        // take a partial amount from the next bin and reduce it by the corresponding amount
-        const h_left = bin_index_to_left_edge(hist_ix, params);
-        const h_right = bin_index_to_left_edge(hist_ix + 1, params);
-        const partial = (right - h_left) / (h_right - h_left);
-
-        const fullValue = hist_bins[hist_ix] ?? 0;
-        value += partial * fullValue;
-        hist_bins[hist_ix] = fullValue * (1 - partial);
-        break;
-      } else if (h_right <= right) {
-        // take the full value
-        value += hist_bins[hist_ix] ?? 0;
-        hist_ix += 1;
-      } else {
-        // we have passed the current bin, break the inner loop
-        break;
-      }
-    }
-
-    bins.push({
-      left,
-      right,
-      height: value / sketch.count,
-    });
+  const last_bin = bins.at(-1)!;
+  if (last_bin.right - last_bin.left < binWidth) {
+    last_bin.right = last_bin.left + binWidth;
   }
 
   return bins;

@@ -208,6 +208,13 @@ fn deserialize_ushort(input: ParserState) -> IResult<Value> {
     })(input)
 }
 
+/// Format: AAKK
+fn mixed_count(input: u32) -> (u32, u32) {
+    let bits = BitArray::<u8, Lsb0>::from(input as u8);
+
+    (bits[2..=3].load::<u32>(), bits[0..=1].load::<u32>())
+}
+
 #[derive(Debug, FromPrimitive)]
 enum SmallObjectType {
     String = 0,
@@ -268,15 +275,19 @@ fn float_array(entry_count: u32) -> impl FnMut(ParserState) -> IResult<Value> {
 /// Read `count` keys from a table into a hashmap.
 fn table(entry_count: u32) -> impl FnMut(ParserState) -> IResult<HashMap<Cow<str>, Value>> {
     move |input| {
-        fold_many_m_n(
+        let res = fold_many_m_n(
             entry_count as usize,
             entry_count as usize,
             pair(
                 context(
-                    "found non-string key in non-array table",
+                    "found table in key location in non-array table",
                     map_res(any_object, |v| match v {
                         Value::String(s) => Ok(s),
-                        _actual => Err(()),
+                        Value::Int(v) => Ok(Cow::Owned(v.to_string())),
+                        Value::Float(v) => Ok(Cow::Owned(v.to_string())),
+                        Value::Bool(b) => Ok(Cow::Owned(b.to_string())),
+                        Value::Nil => Ok(Cow::Borrowed("nil")),
+                        Value::Table(_actual) => Err("found table in table key location"),
                     }),
                 ),
                 any_object,
@@ -286,19 +297,17 @@ fn table(entry_count: u32) -> impl FnMut(ParserState) -> IResult<HashMap<Cow<str
                 map.insert(k, v);
                 map
             },
-        )(input)
-    }
-}
+        )(input);
 
-// ugh
-fn destructure_mixed_counts(c: u32) -> (u32, u32) {
-    (c % 4 + 1, c / 4 + 1)
+        return res;
+    }
 }
 
 /// Mixed table (array and keyed parts). `count` is actually bits, but I realized late and haven't
 /// gone back to fix it yet. FIXME
-fn mixed_table(mixed_counts: u32) -> impl FnMut(ParserState) -> IResult<Value> {
-    let (array_count, keyed_count) = destructure_mixed_counts(mixed_counts);
+fn mixed_table(
+    (array_count, keyed_count): (u32, u32),
+) -> impl FnMut(ParserState) -> IResult<Value> {
     move |input| {
         map(
             tuple((array(array_count), table(keyed_count))),
@@ -370,7 +379,7 @@ fn deserialize_small_object(input: ParserState) -> IResult<Value> {
         SmallObjectType::Table => store_table_ref(cut(map(table(count), |map| {
             Value::Table(Table::Named(map))
         })))(rest),
-        SmallObjectType::Mixed => store_table_ref(cut(mixed_table(count)))(rest),
+        SmallObjectType::Mixed => store_table_ref(cut(mixed_table(mixed_count(count))))(rest),
     }
 }
 
@@ -429,9 +438,9 @@ impl LargeObjectHeader {
             Float => 8,
             Nil | BoolTrue | BoolFalse => 0,
 
-            Mixed8 => 2,
-            Mixed16 => 4,
-            Mixed24 => 6,
+            Mixed8 => 1,
+            Mixed16 => 2,
+            Mixed24 => 3,
         }
     }
 }
@@ -511,9 +520,10 @@ fn deserialize_large_object(input: ParserState) -> IResult<Value> {
                 Value::Table(Table::Array(arr))
             }),
         ))))(rest),
-        val @ (Mixed8 | Mixed16 | Mixed24) => {
-            store_table_ref(cut(flat_map(int(val.bytes()), mixed_table)))(rest)
-        }
+        val @ (Mixed8 | Mixed16 | Mixed24) => store_table_ref(cut(flat_map(
+            tuple((int(val.bytes()), int(val.bytes()))),
+            mixed_table,
+        )))(rest),
         Float => cut(map(float, Value::Float))(rest),
         val @ FloatStrPos => cut(map(flat_map(int(val.bytes()), float_str), Value::Float))(rest),
         val @ FloatStrNeg => cut(map(flat_map(int(val.bytes()), float_str), |v| {

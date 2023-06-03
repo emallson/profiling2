@@ -1,7 +1,7 @@
 use std::{borrow::Cow, collections::HashMap};
 
 use schemars::JsonSchema;
-use serde::{Deserialize, Serialize};
+use serde::{de::Visitor, Deserialize, Deserializer, Serialize};
 
 #[derive(Debug, PartialEq, Deserialize, JsonSchema)]
 #[serde(untagged)]
@@ -69,10 +69,53 @@ pub struct TrackerCore {
     pub total_time: f64,
 }
 
+#[derive(Deserialize, Eq, Hash, PartialEq)]
+#[serde(untagged)]
+enum MixedBinKey {
+    Integer(u64),
+    String(String),
+}
+
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum MixedBinType {
+    Array(Vec<f64>),
+    Mixed(HashMap<MixedBinKey, f64>),
+}
+
+// TODO this should probably have a custom visitor for efficiency, but its such a rare case that we
+// take the easy way out.
+fn deserialize_bins<'de, D: Deserializer<'de>>(de: D) -> Result<Option<Vec<f64>>, D::Error> {
+    match MixedBinType::deserialize(de)? {
+        MixedBinType::Array(vec) => Ok(Some(vec)),
+        MixedBinType::Mixed(map) => {
+            let mut result = vec![];
+
+            for (ix, value) in map.into_iter() {
+                let ix = match ix {
+                    MixedBinKey::Integer(ix) => ix as usize,
+                    MixedBinKey::String(s) => {
+                        s.parse::<usize>().map_err(serde::de::Error::custom)?
+                    }
+                };
+
+                if ix >= result.len() {
+                    result.resize(ix + 1, 0.0);
+                }
+                result[ix] = value;
+            }
+
+            Ok(Some(result))
+        }
+    }
+}
+
 #[derive(Debug, PartialEq, Clone, Serialize, Deserialize, JsonSchema)]
 #[schemars(deny_unknown_fields)]
 pub struct SketchStats {
     pub outliers: Vec<f64>,
+    #[serde(deserialize_with = "deserialize_bins")]
+    #[serde(default)]
     pub bins: Option<Vec<f64>>,
     pub count: u64,
     pub trivial_count: u64,

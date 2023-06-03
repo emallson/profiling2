@@ -203,8 +203,6 @@ pub enum ParseError {
     SerdeCustom(String),
     #[error("A parse error occurred: {0}")]
     ValueError(String),
-    #[error("Parsing tables with mixed array and named parts is unsupported.")]
-    MixedTable,
 }
 
 impl de::Error for ParseError {
@@ -252,7 +250,15 @@ impl<'de, 'a> de::Deserializer<'de> for ValueDeserializer<'a> {
             Value::Table(Table::FloatArray(vec)) => {
                 visitor.visit_seq(SeqDeserializer::new(vec.into_iter()))
             }
-            Value::Table(Table::MixedTable { .. }) => Err(ParseError::MixedTable),
+            Value::Table(Table::MixedTable { array, named }) => {
+                visitor.visit_map(MapDeserializer::new(
+                    array
+                        .into_iter()
+                        .enumerate()
+                        .map(|(i, v)| (Value::Int(i as i64), v))
+                        .chain(named.into_iter().map(|(k, v)| (Value::String(k), v))),
+                ))
+            }
         }
     }
 

@@ -96,4 +96,24 @@ mod test {
             }
         }
     }
+
+    #[test]
+    fn parse_heiji_may30_data() {
+        let result =
+            super::parse_saved_variables(include_str!("../../../test-data/test_heiji_may30.lua"));
+
+        assert!(result.is_ok());
+
+        let mut result = result.unwrap();
+        assert_eq!(result.recordings.len(), 14);
+
+        for recording in &mut result.recordings {
+            match &recording.data {
+                crate::parser::RecordingData::Unparsed(raw) => {
+                    parse_compressed_recording(raw).expect("to succeed");
+                }
+                _ => {}
+            }
+        }
+    }
 }

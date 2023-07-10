@@ -21,7 +21,7 @@ local function frameName(frame)
   if name == nil or #name == 0 then
     local debugName = frame:GetDebugName()
     if debugName == nil or #debugName  == 0 then
-      return "Anonymous"
+      return tostring(frame)
     end
     return string.match(debugName, "[^%.]+$")
   end
@@ -129,9 +129,8 @@ local function hookCreateFrame()
   local function hookSetScript(frame, scriptType, fn)
     local name = frame:GetName()
     local parent = frame:GetParent()
-    if (frame.IsTopLevel and frame:IsToplevel())
-      or (frame.IsForbidden and frame:IsForbidden())
-      or (frame.IsProtected and frame:IsProtected())
+    if (frame.IsForbidden and frame:IsForbidden())
+      -- or (frame.IsProtected and frame:IsProtected())
       or (name ~= nil and string.match(name, "Blizzard") ~= nil)
       or (parent ~= nil and parent:GetDebugName() == "NamePlateDriverFrame")
       -- workaround for the CastSequenceManager frame, which is lazily created
@@ -217,6 +216,10 @@ function profiling2.registerExternalFunction(key, fn, tracker)
     fn = fn,
     tracker = tracker,
   }
+end
+
+function P2_GetTrackers()
+  return { script = trackedFunctions, external = trackedExternals }
 end
 
 local renderTracker = ns.tracker.getScriptTracker()

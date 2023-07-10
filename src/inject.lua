@@ -131,6 +131,26 @@ local function injectPlater()
   end
 end
 
+local function injectVuhdo()
+  local vuhdoBaseKey = '@VuhDo/GlobalMethods'
+  local function isVuhdoFunction(key, value)
+    if type(value) ~= 'function' then return false end
+    return key:match("^VUHDO") ~= nil or key:match("^VuhDo") ~= nil
+  end
+  for fname, value in pairs(_G) do
+    if isVuhdoFunction(fname, value) then
+      local tracker = ns.tracker.getScriptTracker(ns.tracker.DependentType.Dependent)
+      local key = vuhdoBaseKey .. ':' .. fname
+      local newValue = ns.core.buildWrapper(tracker, value)
+      _G[fname] = newValue
+      -- print(key, value, _G[key])
+      ns.core.registerExternalFunction(key, _G[fname], tracker)
+    end
+  end
+  VUHDO_loadVariables()
+  VUHDO_initAllBurstCaches()
+end
+
 
 if ns.isScriptProfilingEnabled() then
   local listener = CreateFrame('Frame', 'Profiling2Inject')
@@ -141,6 +161,8 @@ if ns.isScriptProfilingEnabled() then
       injectWA()
     elseif addonName == 'Plater' then
       injectPlater()
+    elseif addonName == 'VuhDo' then
+      injectVuhdo()
     end
   end)
 end

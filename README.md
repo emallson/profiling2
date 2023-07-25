@@ -65,6 +65,7 @@ These metrics are recorded for:
 - Every custom trigger of every loaded Plater script/mod (similar approach, but somehow even
   spicier)
 - Every core Plater method (listen, I wanna know if `Plater.CheckRange` has tail issues, okay?)
+- Every core VuhDo method
 
 This is obviously **hilariously invasive** and any taint issues or strange bugs you run into are
 _probably_ a result of running this.

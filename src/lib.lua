@@ -10,6 +10,8 @@ local thisAddonName = select(1, ...)
 ---@class Profiling2CoreNs
 local profiling2 = {}
 ns.core = profiling2
+local LibDeflate = LibStub("LibDeflate")
+local LibSerialize = LibStub("LibSerialize")
 
 local addonVersion = GetAddOnMetadata and GetAddOnMetadata(thisAddonName, "Version") or "unknown"
 
@@ -124,6 +126,15 @@ local OBJECT_TYPES = {
   'UnitPositionFrame',
 }
 
+local function captureSetScriptSource(frame)
+  local name = frame:GetName()
+  if name ~= nil and #name > 0 then
+    return
+  end
+
+  return debugstack(4)
+end
+
 local function hookCreateFrame()
   local OrigSetScript = {}
   local function hookSetScript(frame, scriptType, fn)
@@ -145,7 +156,11 @@ local function hookCreateFrame()
       return
     end
 
+    local sourceLine = captureSetScriptSource(frame)
     local frameKey = profiling2.frameKey(frame)
+    if sourceLine ~= nil then
+      frameKey = frameKey .. '/dec:' .. LibDeflate:EncodeForPrint(LibDeflate:CompressDeflate(sourceLine))
+    end
     local key = strjoin(':', frameKey, scriptType)
     -- print('hooking frame: ' .. frameKey)
 
@@ -279,8 +294,6 @@ function profiling2.startEncounter(encounterId, encounterName, difficultyId, gro
 end
 
 local MAX_RECORDINGS = 50
-local LibDeflate = LibStub("LibDeflate")
-local LibSerialize = LibStub("LibSerialize")
 
 ---@class Recording
 ---@field encounter table

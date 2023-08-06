@@ -21,6 +21,25 @@ direction of someone who knows what it is doing and knows how to read the result
 
 Usability by a general audience is an explicit non-goal.
 
+### BEFORE Using for Performance Problems
+
+If you are attempting to use p2 to diagnose performance problems with a full WoW UI that has poor 
+framerate, I strongly recommend that you *first* do some testing with only the base UI to establish
+a baseline framerate.
+
+When dealing with very low FPS (less than 20), be aware that this is going to make things worse. If 
+the problem is hardware (e.g. lack of / bad RAM), not addons, then it might make things *much* worse.
+
+**For Severe Low-FPS Problems:** Begin by disabling all addons to establish a baseline, then enable a few and
+iterate until you isolate the problem. You may be able to diagnose the exact addon with poor performance
+without requiring p2 at all. If you cannot isolate the problem this way and baseline performance is good,
+then it may be time to enable p2.
+
+**For "Lag Spike" Problems:** You are unlikely to be able to identify the root cause of a "Lag Spike" 
+without P2 due to the nature of other profiling tools. As long as the normal FPS of the user's setup 
+is fine, performance should remain acceptable during profiling. (For example: I am typically at 70-75 FPS 
+without p2, and when profiling I drop to 65-70)
+
 ### Installation & Setup
 
 1. Download the latest release from the sidebar and install it the old fashioned way (unzip in your
@@ -33,6 +52,8 @@ Usability by a general audience is an explicit non-goal.
 The addon will automatically begin recording when you start a raid encounter or Mythic+ dungeon, and
 save the data out when you complete a raid encounter or **successfully** complete a Mythic+ dungeon
 (Blizzard doesn't fire an event for failed M+ runs).
+
+You can use the `/p2 help` command to get a full list of available commands.
 
 ## Usage For Addon Developers
 

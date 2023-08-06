@@ -408,7 +408,7 @@ function profiling2.endMythicPlus(isCompletion, mapId)
 end
 
 function ns.printStatus()
-  print("Profiling2 Status: " .. (ns.tracker.isEncounterInProgress() and "|cff00ff00Active|r" or "|cffff0000Inactive|r"))
+  print("Profiling2 Status: " .. (ns.tracker.isEncounterInProgress() and "|cff00ff00Recording Data|r" or "|cffff0000Not Currently Recording|r"))
   print("scriptProfile CVar Status: " .. (ns.isScriptProfilingEnabled() and "|cff00ff00On|r" or "|cffff0000Off|r"))
   print("Instrumented Scripts: " .. instrumentedCount)
   print("Renders Recorded: " .. renderTracker:renderCount())

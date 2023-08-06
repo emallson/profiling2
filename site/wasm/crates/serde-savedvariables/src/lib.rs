@@ -238,26 +238,11 @@ impl<'de, 'a> de::Deserializer<'de> for ValueDeserializer<'a> {
             Value::Float(v) => visitor.visit_f64(v),
             Value::String(Cow::Owned(v)) => visitor.visit_string(v),
             Value::String(Cow::Borrowed(v)) => visitor.visit_str(v),
-            Value::Table(Table::Empty) => {
-                visitor.visit_seq(SeqDeserializer::new(std::iter::empty::<Value<'a>>()))
+            Value::Table(Table::Empty | Table::Array(_) | Table::FloatArray(_)) => {
+                self.deserialize_seq(visitor)
             }
-            Value::Table(Table::Array(vec)) => {
-                visitor.visit_seq(SeqDeserializer::new(vec.into_iter()))
-            }
-            Value::Table(Table::Named(map)) => {
-                visitor.visit_map(MapDeserializer::new(map.into_iter()))
-            }
-            Value::Table(Table::FloatArray(vec)) => {
-                visitor.visit_seq(SeqDeserializer::new(vec.into_iter()))
-            }
-            Value::Table(Table::MixedTable { array, named }) => {
-                visitor.visit_map(MapDeserializer::new(
-                    array
-                        .into_iter()
-                        .enumerate()
-                        .map(|(i, v)| (Value::Int(i as i64), v))
-                        .chain(named.into_iter().map(|(k, v)| (Value::String(k), v))),
-                ))
+            Value::Table(Table::Named(_) | Table::MixedTable { .. }) => {
+                self.deserialize_map(visitor)
             }
         }
     }
@@ -283,10 +268,69 @@ impl<'de, 'a> de::Deserializer<'de> for ValueDeserializer<'a> {
         visitor.visit_newtype_struct(self)
     }
 
+    fn deserialize_map<V>(self, visitor: V) -> Result<V::Value, Self::Error>
+    where
+        V: Visitor<'de>,
+    {
+        match self.0 {
+            Value::Table(Table::Empty) => visitor.visit_map(MapDeserializer::new(
+                std::iter::empty::<(Value<'a>, Value<'a>)>(),
+            )),
+            Value::Table(Table::Array(v)) if v.is_empty() => visitor.visit_map(
+                MapDeserializer::new(std::iter::empty::<(Value<'a>, Value<'a>)>()),
+            ),
+            Value::Table(Table::FloatArray(v)) if v.is_empty() => visitor.visit_map(
+                MapDeserializer::new(std::iter::empty::<(Value<'a>, Value<'a>)>()),
+            ),
+            Value::Table(Table::Named(map)) => {
+                visitor.visit_map(MapDeserializer::new(map.into_iter()))
+            }
+
+            Value::Table(Table::MixedTable { array, named }) => {
+                visitor.visit_map(MapDeserializer::new(
+                    array
+                        .into_iter()
+                        .enumerate()
+                        .map(|(i, v)| (Value::Int(i as i64), v))
+                        .chain(named.into_iter().map(|(k, v)| (Value::String(k), v))),
+                ))
+            }
+            value => Err(ParseError::SerdeCustom(format!(
+                "expected named or mixed table, found {:?}",
+                value
+            ))),
+        }
+    }
+    fn deserialize_seq<V>(self, visitor: V) -> Result<V::Value, Self::Error>
+    where
+        V: Visitor<'de>,
+    {
+        match self.0 {
+            Value::Table(Table::Empty) => {
+                visitor.visit_seq(SeqDeserializer::new(std::iter::empty::<Value<'a>>()))
+            }
+            Value::Table(Table::Named(map)) if map.is_empty() => {
+                visitor.visit_seq(SeqDeserializer::new(std::iter::empty::<Value<'a>>()))
+            }
+            Value::Table(Table::MixedTable { array, named })
+                if named.is_empty() && array.is_empty() =>
+            {
+                visitor.visit_seq(SeqDeserializer::new(std::iter::empty::<Value<'a>>()))
+            }
+            Value::Table(Table::Array(vec)) => {
+                visitor.visit_seq(SeqDeserializer::new(vec.into_iter()))
+            }
+            Value::Table(Table::FloatArray(vec)) => {
+                visitor.visit_seq(SeqDeserializer::new(vec.into_iter()))
+            }
+            _ => Err(ParseError::SerdeCustom("expected array table".into())),
+        }
+    }
+
     forward_to_deserialize_any! {
         bool i8 i16 i32 i64 i128 u8 u16 u32 u64 u128 f32 f64 char str string
-        bytes byte_buf unit unit_struct seq tuple
-        tuple_struct map struct enum identifier ignored_any
+        bytes byte_buf unit unit_struct tuple
+        tuple_struct struct enum identifier ignored_any
     }
 }
 

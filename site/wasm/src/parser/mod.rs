@@ -116,4 +116,24 @@ mod test {
             }
         }
     }
+
+    #[test]
+    fn parse_sokchoy_empty_data() {
+        let result =
+            super::parse_saved_variables(include_str!("../../../test-data/test_empty_table.lua"));
+
+        assert!(result.is_ok());
+
+        let mut result = result.unwrap();
+        assert_eq!(result.recordings.len(), 1);
+
+        for recording in &mut result.recordings {
+            match &recording.data {
+                crate::parser::RecordingData::Unparsed(raw) => {
+                    parse_compressed_recording(raw).expect("to succeed");
+                }
+                _ => {}
+            }
+        }
+    }
 }

@@ -152,7 +152,7 @@ const ChildLabel = styled("span", {
 
 const heatBins = (child: TreeNode, domainEnd: number): Plot.Rect => {
   const data = leaves(child);
-  if (isOldTrackerData(data[0])) {
+  if (data.length === 0 || isOldTrackerData(data[0])) {
     const binWidth = domainEnd / BIN_COUNT;
     const samples = joined_samples(child) ?? [];
     return Plot.rect(samples, {

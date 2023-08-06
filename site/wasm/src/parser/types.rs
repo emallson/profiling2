@@ -1,7 +1,7 @@
 use std::{borrow::Cow, collections::HashMap};
 
 use schemars::JsonSchema;
-use serde::{de::Visitor, Deserialize, Deserializer, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 
 #[derive(Debug, PartialEq, Deserialize, JsonSchema)]
 #[serde(untagged)]

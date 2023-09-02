@@ -156,7 +156,10 @@ local function hookCreateFrame()
       return
     end
 
-    local sourceLine = captureSetScriptSource(frame)
+    local sourceLine = nil
+    if scriptType == "OnUpdate" or scriptType == "OnEvent" then
+      sourceLine = captureSetScriptSource(frame)
+    end
     local frameKey = profiling2.frameKey(frame)
     if sourceLine ~= nil then
       frameKey = frameKey .. '/dec:' .. LibDeflate:EncodeForPrint(LibDeflate:CompressDeflate(sourceLine))

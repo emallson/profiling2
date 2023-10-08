@@ -143,6 +143,7 @@ local function hookCreateFrame()
     if (frame.IsForbidden and frame:IsForbidden())
       -- or (frame.IsProtected and frame:IsProtected())
       or (name ~= nil and string.match(name, "Blizzard") ~= nil)
+      or (parent == PingFrame) -- workaround for ping frame
       or (parent ~= nil and parent:GetDebugName() == "NamePlateDriverFrame")
       -- workaround for the CastSequenceManager frame, which is lazily created
       -- after we hook and neither forbidden, protected, top-level, or named

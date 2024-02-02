@@ -41,13 +41,13 @@ export function formatTimestamp(time: number): string {
 const selectedStyle = style({
   backgroundColor: "#eee",
   ":hover": {
-    backgroundColor: "#ffe",
+    backgroundColor: "#eef",
   },
 });
 
 const baseStyle = style({
   ":hover": {
-    backgroundColor: "#ffe",
+    backgroundColor: "#eef",
   },
 });
 

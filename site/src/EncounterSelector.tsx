@@ -40,12 +40,21 @@ export function formatTimestamp(time: number): string {
 
 const selectedStyle = style({
   backgroundColor: "#eee",
+  ":hover": {
+    backgroundColor: "#eae",
+  },
+});
+
+const baseStyle = style({
+  ":hover": {
+    backgroundColor: "#ffe",
+  },
 });
 
 const EncounterEntry = (props: { encounter: Encounter; onClick: () => void }) => {
   const recording = useSelectedRecording();
   const style = createMemo(() =>
-    recording()?.encounter.startTime === props.encounter.startTime ? selectedStyle : undefined
+    recording()?.encounter.startTime === props.encounter.startTime ? selectedStyle : baseStyle
   );
   return (
     <div class={style()} onClick={() => props.onClick()}>

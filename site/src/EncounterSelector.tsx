@@ -42,7 +42,7 @@ const baseStyle = style({
   ":hover": {
     backgroundColor: "#eef",
   },
-  padding: "0.25em 0.1em",
+  padding: "0.1em 0.25em",
 });
 
 const selectedStyle = style([

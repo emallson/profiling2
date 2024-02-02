@@ -1,6 +1,5 @@
 import { styled } from "@macaron-css/solid";
 import { useSavedVariables } from "./SavedVariablesContext";
-import { createEffect } from "solid-js";
 
 const CenteringContainer = styled("div", {
   base: {
@@ -10,12 +9,20 @@ const CenteringContainer = styled("div", {
   },
 });
 
+const SelectForm = styled("div", {
+  base: {
+    display: "flex",
+    flexDirection: "column",
+    gap: "0.25em",
+  },
+});
+
 export default function FilePickerPage() {
   const { load, store } = useSavedVariables();
 
   return (
     <CenteringContainer>
-      <div>
+      <SelectForm>
         <label for="file-picker">Select profiling data</label>
         <input
           type="file"
@@ -29,7 +36,7 @@ export default function FilePickerPage() {
         {store?.().success === false && (
           <div>{store?.().error?.toString() ?? "Unable to read data"}</div>
         )}
-      </div>
+      </SelectForm>
     </CenteringContainer>
   );
 }

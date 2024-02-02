@@ -63,7 +63,7 @@ function outlierData(data: NewTrackerData): number[] {
 function maxObservedTime(node: TreeNode): number {
   return Math.max.apply(
     null,
-    leaves(node).flatMap((leaf) => (isOldTrackerData(leaf) ? leaf.top5 : outlierData(leaf)))
+    leaves(node).flatMap((leaf) => (isOldTrackerData(leaf) ? leaf.top5 : outlierData(leaf))),
   );
 }
 
@@ -87,7 +87,7 @@ function totalCalls(node: TreeNode): number {
 function leastCommits(node: TreeNode): number {
   return Math.max.apply(
     null,
-    leaves(node).map((leaf) => leaf.commits)
+    leaves(node).map((leaf) => leaf.commits),
   );
 }
 
@@ -136,7 +136,7 @@ const dangerZoneMark = (max: number) =>
       fill: "fill",
       fillOpacity: 0.25,
       title: "title",
-    }
+    },
   );
 
 const BIN_COUNT = 33;
@@ -147,6 +147,9 @@ const ChildLabel = styled("span", {
     textOverflow: "ellipsis",
     overflowX: "hidden",
     whiteSpace: "nowrap",
+    ":hover": {
+      backgroundColor: "#eef",
+    },
   },
 });
 
@@ -160,7 +163,7 @@ const heatBins = (child: TreeNode, domainEnd: number): Plot.Rect => {
         { fillOpacity: "proportion" },
         {
           x: { value: (d) => d, interval: binWidth },
-        }
+        },
       ),
       strokeOpacity: 0.25,
       fill: "black",
@@ -190,7 +193,7 @@ const heatBins = (child: TreeNode, domainEnd: number): Plot.Rect => {
           }
           return `${d.left.toFixed(1)} - ${d.right.toFixed(1)}ms ― ${pctFmt}% of samples`;
         },
-      }
+      },
     );
   }
 };
@@ -244,7 +247,7 @@ export function ChildSummary(props: {
             console.log(
               props.child,
               heatBins(props.child, props.domainEnd),
-              joined_hists(props.child, useSketchParams(), props.domainEnd)
+              joined_hists(props.child, useSketchParams(), props.domainEnd),
             );
           }
           props.onClick();
@@ -293,7 +296,7 @@ function joined_bins(node: TreeNode, domainEnd: number): Plot.Rect {
         {
           x: { value: (d) => d, interval: domainEnd / BIN_COUNT },
           fill: "black",
-        }
+        },
       ),
     });
   }
@@ -343,7 +346,7 @@ export function NodeSummary(props: { node: TreeNode; rootMode?: boolean }) {
         ref={(ref) =>
           setTimeout(
             () => ref.scrollIntoView({ behavior: "smooth", block: "start", inline: "end" }),
-            10
+            10,
           )
         }
       >
@@ -441,7 +444,7 @@ function scaledUpdateDelay(data: TrackerData): TrackerData {
         samples: data.stats.samples?.map((sample) => sample * OUD_SCALE),
         quantiles: data.stats.quantiles
           ? Object.fromEntries(
-              Object.entries(data.stats.quantiles).map(([k, v]) => [k, v * OUD_SCALE])
+              Object.entries(data.stats.quantiles).map(([k, v]) => [k, v * OUD_SCALE]),
             )
           : undefined,
       },
@@ -467,7 +470,7 @@ export function RootSummary() {
     const scriptRoots = buildScriptTree(scripts.map(fromScriptEntry));
     const externalRoots = buildScriptTree(
       externals.map(fromScriptEntry),
-      (subject) => subject.addonName === "Plater" && subject.frameName === "Core"
+      (subject) => subject.addonName === "Plater" && subject.frameName === "Core",
     );
 
     const roots: Record<string, IntermediateNode> = {
@@ -498,7 +501,7 @@ export function RootSummary() {
   });
 
   const sketchParams = createMemo<SketchParams>(
-    () => recording()?.data.sketch_params ?? defaultSketchParams
+    () => recording()?.data.sketch_params ?? defaultSketchParams,
   );
 
   return (

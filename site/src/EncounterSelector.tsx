@@ -38,18 +38,19 @@ export function formatTimestamp(time: number): string {
   }).format(date);
 }
 
-const selectedStyle = style({
-  backgroundColor: "#eee",
-  ":hover": {
-    backgroundColor: "#eef",
-  },
-});
-
 const baseStyle = style({
   ":hover": {
     backgroundColor: "#eef",
   },
+  padding: "0.25em 0.1em",
 });
+
+const selectedStyle = style([
+  baseStyle,
+  {
+    backgroundColor: "#eee",
+  },
+]);
 
 const EncounterEntry = (props: { encounter: Encounter; onClick: () => void }) => {
   const recording = useSelectedRecording();

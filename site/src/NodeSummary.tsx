@@ -150,6 +150,7 @@ const ChildLabel = styled("span", {
     ":hover": {
       backgroundColor: "#eef",
     },
+    padding: "0.25em 0",
   },
 });
 

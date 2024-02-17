@@ -63,7 +63,7 @@ function profiling2.addonName(frame)
   return name
 end
 
-local function isProbablyBlizzardFrame(frame)
+function ns.isProbablyBlizzardFrame(frame)
   local issecure, name = issecurevariable({ frame = frame }, 'frame')
   return issecure or name == thisAddonName or name == "*** ForceTaint_Strong ***"
 end
@@ -148,7 +148,7 @@ local function hookCreateFrame()
       -- workaround for the CastSequenceManager frame, which is lazily created
       -- after we hook and neither forbidden, protected, top-level, or named
       or (frame.elapsed ~= nil)
-      or isProbablyBlizzardFrame(frame)
+      or ns.isProbablyBlizzardFrame(frame)
       or name == "NamePlateDriverFrame" then
       -- print("skipping frame hook")
       return

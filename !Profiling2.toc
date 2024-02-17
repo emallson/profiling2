@@ -1,4 +1,4 @@
-## Interface: 100100
+## Interface: 100250
 ## Title: !Profiling2
 ## Version: @project-version@
 ## SavedVariables: Profiling2_Storage
@@ -12,5 +12,6 @@ src\sketch.lua
 src\tracker.lua
 src\external.lua
 src\lib.lua
+src\timer.lua
 src\console.lua
 src\inject.lua

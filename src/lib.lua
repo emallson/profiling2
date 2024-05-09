@@ -135,6 +135,25 @@ local function captureSetScriptSource(frame)
   return debugstack(4)
 end
 
+local function onEventWrapper(frameKey, fn)
+  local wrappers = {}
+  return function(frame, eventName, ...)
+    local key = frameKey .. '/OnEvent:' .. eventName
+    local scriptWrapper
+    if wrappers[eventName] ~= nil then
+      scriptWrapper = wrappers[eventName]
+    else
+      local tracker = ns.tracker.getFrameScriptTracker(frame, 'OnEvent.' .. eventName)
+      local wrappedFn = function(...) fn(...) end
+      profiling2.registerFunction(key, wrappedFn, tracker)
+      scriptWrapper = profiling2.buildWrapper(tracker, wrappedFn)
+      wrappers[eventName] = scriptWrapper
+    end
+
+    return scriptWrapper(frame, eventName, ...)
+  end
+end
+
 local function hookCreateFrame()
   local OrigSetScript = {}
   local function hookSetScript(frame, scriptType, fn)
@@ -165,14 +184,20 @@ local function hookCreateFrame()
     if sourceLine ~= nil then
       frameKey = frameKey .. '/dec:' .. LibDeflate:EncodeForPrint(LibDeflate:CompressDeflate(sourceLine))
     end
-    local key = strjoin(':', frameKey, scriptType)
-    -- print('hooking frame: ' .. frameKey)
 
-    local tracker = ns.tracker.getFrameScriptTracker(frame, scriptType)
-    local wrappedFn = function(...) fn(...) end
-    profiling2.registerFunction(key, wrappedFn, tracker)
-
-    local scriptWrapper = profiling2.buildWrapper(tracker, wrappedFn)
+    local scriptWrapper
+    if scriptType == 'OnEvent' then
+      scriptWrapper = onEventWrapper(frameKey, fn)
+    else
+      local key = strjoin(':', frameKey, scriptType)
+      -- print('hooking frame: ' .. frameKey)
+  
+      local tracker = ns.tracker.getFrameScriptTracker(frame, scriptType)
+      local wrappedFn = function(...) fn(...) end
+      profiling2.registerFunction(key, wrappedFn, tracker)
+  
+      scriptWrapper = profiling2.buildWrapper(tracker, wrappedFn)
+    end
 
     -- we use the original SetScript method to avoid triggering loops
     -- hooksecurefunc(t, f, h) basically works by replacing t[f] with 
